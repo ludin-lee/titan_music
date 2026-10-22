@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>사무실 플레이어</title>
+<link rel="icon" href="/logo.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://titan-ui-cqu.pages.dev/v1/titan-ui.css">
+<link rel="stylesheet" href="/style.css">
+<style>
+  .stage { background: var(--black); border-radius: 16px; overflow: hidden; aspect-ratio: 16/9; display: grid; place-items: center; box-shadow: var(--shadow); }
+  .stage iframe { width: 100%; height: 100%; display: block; }
+  #start { font-size: 18px; padding: 14px 28px; min-height: 52px; }
+</style>
+</head>
+<body>
+<div class="topbar"><div class="in">
+  <img class="logo" src="/logo.png" alt="타이탄">
+  <div><h1>사무실 플레이어</h1><div class="sub">신청곡 먼저, 없으면 기본 리스트를 순서대로 반복해요</div></div>
+  <div class="right ctrl" id="ctrl" hidden>
+    <button class="btn line" onclick="playPrev()">⏮ 이전곡</button>
+    <button class="btn red" onclick="toggle()">⏯ 재생/일시정지</button>
+    <button class="btn line" onclick="playNext()">⏭ 다음곡</button>
+  </div>
+</div></div>
+
+<div class="wrap">
+<main>
+  <div class="stage"><div id="player"><button class="btn red" id="start" disabled>▶ 플레이어 시작</button></div></div>
+  <div id="now"></div>
+  <section class="card">
+    <h2>기본 리스트 <small>신청곡이 없을 때 순서대로 반복</small></h2>
+    <ul class="list" id="base"></ul>
+  </section>
+</main>
+<aside class="card">
+  <h2>받은 신청곡 <small id="reqCount"></small></h2>
+  <ul class="list" id="queue"></ul>
+</aside>
+</div>
+
+<script src="/common.js"></script>
+<script src="https://www.youtube.com/iframe_api"></script>
+<script>
+let player, current = null, cmdSeq = null, last = {};
+
+function onYouTubeIframeAPIReady() { document.getElementById('start').disabled = false; }
+
+// 영상 없이 플레이어를 만들면 유튜브가 "오류가 발생했습니다" 화면을 띄우므로 첫 곡이 생길 때 만든다
+function play(id) {
+  if (player) return player.loadVideoById(id);
+  player = new YT.Player('player', {
+    width: '100%', height: '100%', videoId: id,
+    playerVars: { autoplay: 1 },
+    events: {
+      onStateChange: e => { if (e.data === YT.PlayerState.ENDED) playNext(); else render(); },
+      onError: () => setTimeout(playNext, 1000), // 임베드 금지/삭제된 영상은 건너뜀
+    },
+  });
+}
+
+const playNext = () => go('/api/next');
+const playPrev = () => go('/api/prev');
+const toggle = () => player && (player.getPlayerState() === YT.PlayerState.PLAYING ? player.pauseVideo() : player.playVideo());
+
+async function go(api) {
+  const { now } = await fetch(api, { method: 'POST' }).then(r => r.json());
+  current = now;
+  if (now) play(now.id);
+  render();
+}
+
+function render() {
+  const s = { ...last, now: current };
+  document.getElementById('now').innerHTML = nowHtml(current, player?.getPlayerState?.() === 2); // 2 = 일시정지 (YT 로드 전에도 안전)
+  document.title = current ? `🎵 ${current.title}` : '사무실 플레이어';
+  document.getElementById('queue').innerHTML = requestList(s);
+  document.getElementById('reqCount').textContent = requestCount(s);
+  document.getElementById('base').innerHTML = baseList(s);
+}
+
+async function poll() {
+  last = await fetch('/api/state').then(r => r.json()).catch(() => last);
+  if (last.cmd && last.cmd.seq !== cmdSeq) ({ prev: playPrev, toggle, next: playNext })[last.cmd.type]?.(); // 관리자 원격 조작
+  else if (!current && (last.queue?.some(q => !q.played) || last.fallback?.length)) playNext(); // 멈춰 있다가 곡이 생김
+  cmdSeq = last.cmd?.seq;
+  render();
+}
+
+// 브라우저 자동재생 정책 때문에 한 번은 클릭 필요
+document.getElementById('start').onclick = async e => {
+  e.target.remove();
+  document.getElementById('ctrl').hidden = false;
+  last = await fetch('/api/state').then(r => r.json());
+  cmdSeq = last.cmd?.seq;
+  current = last.now;
+  if (current) play(current.id); else await playNext();
+  render();
+  setInterval(poll, 3000);
+};
+
+// 시작 전에도 목록은 보이게
+fetch('/api/state').then(r => r.json()).then(s => { last = s; current = s.now; render(); });
+</script>
+</body>
+</html>

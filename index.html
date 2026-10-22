@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#FFFFFF">
+<title>노래 예약</title>
+<link rel="icon" href="/logo.png">
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<link rel="stylesheet" href="https://titan-ui-cqu.pages.dev/v1/titan-ui.css">
+<link rel="stylesheet" href="/style.css">
+</head>
+<body>
+<div class="topbar"><div class="in">
+  <img class="logo" src="/logo.png" alt="타이탄">
+  <div><h1>노래 예약</h1><div class="sub">사무실 스피커 · 누구나 듣고 싶은 노래를 신청해요</div></div>
+</div></div>
+
+<div class="wrap">
+<main>
+  <div id="now"></div>
+
+  <section class="card">
+    <h2>신청하기 <small>노래 제목으로 검색하거나 유튜브 링크를 붙여넣으세요</small></h2>
+    <form id="req">
+      <input id="by" placeholder="이름 (선택)" maxlength="20" style="margin-bottom:8px">
+      <div class="search">
+        <input id="url" type="search" placeholder="예) 아이유 밤편지" required>
+        <button class="btn red">검색</button>
+      </div>
+    </form>
+    <div class="msg" id="msg" role="status"></div>
+    <ul class="list" id="results"></ul>
+  </section>
+
+  <section class="card">
+    <h2>기본 리스트 <small>신청곡이 없을 때 순서대로 반복</small></h2>
+    <ul class="list" id="base"></ul>
+  </section>
+
+  <details class="card">
+    <summary>관리자</summary>
+    <div class="search" style="margin-top:14px">
+      <input id="pw" type="password" placeholder="관리자 비밀번호">
+      <button class="btn" id="login" type="button">확인</button>
+    </div>
+    <div id="admin" hidden>
+      <div class="ctrl" id="ctrl" style="margin-top:14px">
+        <button class="btn line" data-cmd="prev">⏮ 이전곡</button>
+        <button class="btn red" data-cmd="toggle">⏯ 재생/일시정지</button>
+        <button class="btn line" data-cmd="next">⏭ 다음곡</button>
+      </div>
+      <div class="note">버튼은 사무실 플레이어에 3초 안에 반영돼요.<br>기본 리스트: 위 검색창에서 검색 후 "목록에 추가"를 누르거나, 유튜브 링크를 한 줄에 하나씩 적고 저장하세요. 위에서부터 순서대로 재생돼요.</div>
+      <textarea id="fallback" rows="10"></textarea>
+      <div class="ctrl" style="margin-top:8px;align-items:center">
+        <button class="btn red" id="saveFb" type="button">저장</button> <span class="msg" id="fbMsg" style="margin:0"></span>
+      </div>
+    </div>
+  </details>
+</main>
+
+<aside class="card">
+  <h2>받은 신청곡 <small id="reqCount"></small></h2>
+  <ul class="list" id="queue"></ul>
+</aside>
+</div>
+
+<script src="/common.js"></script>
+<script>
+const $ = id => document.getElementById(id);
+let isAdmin = false;
+$('by').value = localStorage.getItem('by') || '';
+
+const post = (url, data) => fetch(url, { method: 'POST', body: JSON.stringify(data) })
+  .then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; });
+const say = (text, err) => { $('msg').textContent = text; $('msg').classList.toggle('err', !!err); };
+
+function render(s) {
+  $('now').innerHTML = nowHtml(s.now);
+  $('queue').innerHTML = requestList(s, x => isAdmin ? `<button class="btn sm line" data-id="${x.id}">삭제</button>` : '');
+  $('reqCount').textContent = requestCount(s);
+  $('base').innerHTML = baseList(s);
+}
+const refresh = () => fetch('/api/state').then(r => r.json()).then(render);
+
+$('req').onsubmit = async e => {
+  e.preventDefault();
+  localStorage.setItem('by', $('by').value);
+  const v = $('url').value.trim();
+  if (/youtu\.?be|^[\w-]{11}$/.test(v)) return reserve(v);
+  say('검색 중…');
+  const list = await fetch('/api/search?q=' + encodeURIComponent(v)).then(r => r.json()).catch(() => []);
+  say(list.length ? '' : '검색 결과가 없어요', !list.length);
+  $('results').innerHTML = list.map(r => row(r, `${esc(r.channel)} · ${esc(r.length)}`,
+    `<button class="btn sm red" data-reserve="${r.id}">신청</button>` +
+    (isAdmin ? `<button class="btn sm line" data-add="${r.id}">목록에 추가</button>` : ''))).join('');
+};
+async function reserve(url) {
+  try {
+    render(await post('/api/queue', { url, by: $('by').value }));
+    $('url').value = ''; $('results').innerHTML = ''; say('✅ 신청됐어요');
+  } catch (err) { say(err.message, true); }
+}
+$('results').onclick = e => {
+  const { reserve: r, add } = e.target.dataset;
+  if (r) reserve(r);
+  if (add) {
+    $('fallback').value = ($('fallback').value.trim() + `\nhttps://youtu.be/${add}`).trim();
+    e.target.remove();
+    $('saveFb').onclick();
+  }
+};
+
+$('login').onclick = async () => {
+  try {
+    const { fallback } = await post('/api/admin/check', { password: $('pw').value });
+    $('fallback').value = fallback.map(v => `https://youtu.be/${v.id}  ${v.title}`).join('\n');
+    $('admin').hidden = false; isAdmin = true; refresh();
+  } catch (err) { alert(err.message); }
+};
+$('ctrl').onclick = e => {
+  const cmd = e.target.closest('[data-cmd]')?.dataset.cmd;
+  if (cmd) post('/api/admin/cmd', { password: $('pw').value, type: cmd }).then(() => setTimeout(refresh, 3500));
+};
+$('saveFb').onclick = async () => {
+  $('fbMsg').textContent = '저장 중…';
+  const r = await post('/api/admin/fallback', { password: $('pw').value, urls: $('fallback').value });
+  $('fallback').value = r.fallback.map(v => `https://youtu.be/${v.id}  ${v.title}`).join('\n');
+  $('fbMsg').textContent = `${r.fallback.length}곡 저장` + (r.skipped ? `, ${r.skipped}개는 못 찾음` : '');
+  refresh();
+};
+$('queue').onclick = e => {
+  if (e.target.dataset.id) post('/api/admin/remove', { password: $('pw').value, id: e.target.dataset.id }).then(render);
+};
+
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
