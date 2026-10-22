@@ -1,1 +1,4 @@
-{ "regions": ["icn1"] }
+{
+  "framework": "nextjs",
+  "regions": ["icn1"]
+}
