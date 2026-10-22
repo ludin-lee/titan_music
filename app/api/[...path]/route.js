@@ -107,12 +107,14 @@ async function route(req, p) {
   const done = async out => { await save(state); return json(out); };
 
   if (p === 'queue') {
+    const by = String(b.by || '').trim().slice(0, 20);
+    if (!by) return json({ error: '이름을 입력해주세요' }, 400);
     const id = videoId(b.url);
     if (!id) return json({ error: '유튜브 링크를 확인해주세요' }, 400);
     const v = await lookup(id).catch(() => null);
     if (!v) return json({ error: '영상을 찾을 수 없어요 (비공개/삭제됨?)' }, 400);
     if (state.queue.some(q => q.id === id && !q.played)) return json({ error: '이미 예약된 곡이에요' }, 400);
-    state.queue.push({ ...v, by: String(b.by || '익명').slice(0, 20) });
+    state.queue.push({ ...v, by });
     return done(publicState(state));
   }
   // ponytail: 플레이어 페이지용이라 비밀번호 없음. 장난치는 사람 생기면 플레이어 전용 토큰 추가
