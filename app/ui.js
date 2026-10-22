@@ -12,6 +12,7 @@ async function call(url, init) {
 }
 export const getState = () => call('/api/state');
 export const post = (url, data = {}) => call(url, { method: 'POST', body: JSON.stringify(data) });
+export const searchYT = q => call('/api/search?q=' + encodeURIComponent(q));
 
 // 탭이 보일 때만 주기적으로 실행
 export function usePoll(fn, ms) {
