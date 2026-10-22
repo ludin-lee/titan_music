@@ -40,6 +40,8 @@ export default function Home() {
   }
 
   async function reserve(url) {
+    if (!by.trim()) return setMsg({ text: '이름을 먼저 입력해주세요', err: true });
+    localStorage.setItem('by', by);
     try {
       setS(await post('/api/queue', { url, by }));
       setQ(''); setResults([]); setMsg({ text: '✅ 신청됐어요' });
@@ -102,7 +104,7 @@ export default function Home() {
           <section className="card">
             <h2>신청하기 <small>노래 제목으로 검색하거나 유튜브 링크를 붙여넣으세요</small></h2>
             <form onSubmit={onSearch}>
-              <input value={by} onChange={e => setBy(e.target.value)} placeholder="이름 (선택)" maxLength={20} style={{ marginBottom: 8 }} />
+              <input value={by} onChange={e => setBy(e.target.value)} placeholder="이름 (필수)" maxLength={20} required aria-label="이름" style={{ marginBottom: 8 }} />
               <div className="search">
                 <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="예) 아이유 밤편지" required />
                 <button className="btn red">검색</button>
