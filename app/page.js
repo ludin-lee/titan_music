@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { BaseList, NowCard, RequestList, Row, Topbar, getState, post, usePoll } from './ui';
+import { BaseList, NowCard, RequestList, Row, Topbar, getState, post, searchYT, usePoll } from './ui';
 
 const fbText = list => list.map(v => `https://youtu.be/${v.id}  ${v.title}`).join('\n');
 
@@ -11,12 +11,14 @@ export default function Home() {
   const [q, setQ] = useState('');
   const [msg, setMsg] = useState({ text: '', err: false });
   const [results, setResults] = useState([]);
-  const [added, setAdded] = useState([]);
 
   const [pw, setPw] = useState('');
   const [admin, setAdmin] = useState(false);
   const [fb, setFb] = useState('');
   const [fbMsg, setFbMsg] = useState('');
+  const [aq, setAq] = useState('');
+  const [aResults, setAResults] = useState([]);
+  const [aMsg, setAMsg] = useState({ text: '' });
   const [vol, setVol] = useState(100);
   const volTimer = useRef();
 
@@ -31,7 +33,7 @@ export default function Home() {
     if (/youtu\.?be|^[\w-]{11}$/.test(v)) return reserve(v);
     setMsg({ text: '검색 중…' });
     try {
-      const list = await fetch('/api/search?q=' + encodeURIComponent(v)).then(async r => { const j = await r.json(); if (!r.ok) throw new Error(j.error); return j; });
+      const list = await searchYT(v);
       setResults(list);
       setMsg(list.length ? { text: '' } : { text: '검색 결과가 없어요', err: true });
     } catch (err) { setResults([]); setMsg({ text: err.message, err: true }); }
@@ -61,10 +63,24 @@ export default function Home() {
     } catch (err) { setFbMsg(err.message); }
   }
 
-  function addToList(id) {
-    const text = `${fb.trim()}\nhttps://youtu.be/${id}`.trim();
-    setFb(text); setAdded(a => [...a, id]); saveFb(text);
+  // 관리자: 검색해서 기본 리스트 맨 뒤에 추가
+  async function onAdminSearch(e) {
+    e.preventDefault();
+    const v = aq.trim();
+    if (/youtu\.?be|^[\w-]{11}$/.test(v)) { addToList(v); setAq(''); return; }
+    setAMsg({ text: '검색 중…' });
+    try {
+      const list = await searchYT(v);
+      setAResults(list);
+      setAMsg(list.length ? { text: '' } : { text: '검색 결과가 없어요', err: true });
+    } catch (err) { setAResults([]); setAMsg({ text: err.message, err: true }); }
   }
+
+  function addToList(urlOrId) {
+    const text = `${fb.trim()}\n${urlOrId.includes('/') ? urlOrId : `https://youtu.be/${urlOrId}`}`.trim();
+    setFb(text); saveFb(text);
+  }
+  const inList = id => (s?.fallback || []).some(v => v.id === id);
 
   const cmd = type => post('/api/admin/cmd', { password: pw, type }).then(() => setTimeout(refresh, 3500));
 
@@ -97,7 +113,6 @@ export default function Home() {
               {results.map(r => (
                 <Row key={r.id} v={r} sub={`${r.channel} · ${r.length}`}>
                   <button className="btn sm red" onClick={() => reserve(r.id)}>신청</button>
-                  {admin && !added.includes(r.id) && <button className="btn sm line" onClick={() => addToList(r.id)}>목록에 추가</button>}
                 </Row>
               ))}
             </ul>
@@ -127,7 +142,26 @@ export default function Home() {
                   <input type="range" min="0" max="100" value={vol} onChange={e => changeVol(Number(e.target.value))} />
                   <b>{vol}</b>
                 </label>
-                <div className="note">버튼과 음량은 사무실 플레이어에 3초 안에 반영돼요.<br />기본 리스트: 위 검색창에서 검색 후 &quot;목록에 추가&quot;를 누르거나, 유튜브 링크를 한 줄에 하나씩 적고 저장하세요. 위에서부터 순서대로 재생돼요.</div>
+                <div className="note">버튼과 음량은 사무실 플레이어에 3초 안에 반영돼요.</div>
+
+                <h3 className="sub-h">기본 리스트에 곡 추가</h3>
+                <form className="search" onSubmit={onAdminSearch}>
+                  <input type="search" value={aq} onChange={e => setAq(e.target.value)} placeholder="노래 제목 검색 또는 유튜브 링크" required />
+                  <button className="btn red">검색</button>
+                </form>
+                <div className={`msg ${aMsg.err ? 'err' : ''}`} role="status">{aMsg.text}</div>
+                <ul className="list">
+                  {aResults.map(r => (
+                    <Row key={r.id} v={r} sub={`${r.channel} · ${r.length}`}>
+                      {inList(r.id)
+                        ? <span className="chip">추가됨</span>
+                        : <button className="btn sm red" onClick={() => addToList(r.id)}>추가</button>}
+                    </Row>
+                  ))}
+                </ul>
+
+                <h3 className="sub-h">기본 리스트 편집</h3>
+                <div className="note">한 줄에 곡 하나, 위에서부터 순서대로 재생돼요. 줄을 지우거나 옮긴 뒤 저장하세요.</div>
                 <textarea rows={10} value={fb} onChange={e => setFb(e.target.value)} />
                 <div className="ctrl" style={{ marginTop: 8, alignItems: 'center' }}>
                   <button className="btn red" type="button" onClick={() => saveFb()}>저장</button>
