@@ -10,7 +10,7 @@ const DATA = path.join(process.cwd(), 'data.json');
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
 const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
 
-const EMPTY = { now: null, queue: [], history: [], fallback: [], fallbackPos: 0, cmd: { seq: 0 }, volume: 100 };
+const EMPTY = { now: null, queue: [], history: [], replayPos: 0, cmd: { seq: 0 }, volume: 100 };
 
 async function redis(...cmd) {
   const r = await fetch(REDIS_URL, { method: 'POST', headers: { Authorization: `Bearer ${REDIS_TOKEN}` }, body: JSON.stringify(cmd), cache: 'no-store' });
@@ -74,26 +74,26 @@ function next(state) {
   if (state.now) state.history = [...state.history, state.now].slice(-50);
   const r = state.queue.find(q => !q.played);
   if (r) { r.played = true; state.now = { ...r }; }
-  else if (state.fallback.length) {
-    // 기본 리스트를 순서대로, 끝까지 다 틀면 처음부터 다시
-    state.now = { ...state.fallback[state.fallbackPos % state.fallback.length], by: null };
-    state.fallbackPos = (state.fallbackPos + 1) % state.fallback.length;
+  else if (state.queue.length) {
+    // 새 신청곡이 없으면 지금까지 받은 신청곡을 처음부터 순서대로 다시
+    state.now = { ...state.queue[state.replayPos % state.queue.length], replay: true };
+    state.replayPos = (state.replayPos + 1) % state.queue.length;
   } else state.now = null;
   return state.now;
 }
 
-// 지금 곡을 원래 자리(신청곡 맨 앞 / 기본 리스트 다음 차례)로 돌려놓고 직전 곡을 다시 튼다. 기록 없으면 지금 곡 처음부터
+// 지금 곡을 원래 자리(새 신청곡이면 맨 앞 / 다시 듣기면 다음 차례)로 돌려놓고 직전 곡을 다시 튼다. 기록 없으면 지금 곡 처음부터
 function prev(state) {
   const cur = state.now;
   if (!state.history.length) return cur;
-  if (cur?.by) { const q = state.queue.findLast(q => q.played && q.id === cur.id); if (q) q.played = false; }
-  else if (cur && state.fallback.length) state.fallbackPos = (state.fallbackPos - 1 + state.fallback.length) % state.fallback.length;
+  if (cur?.replay) state.replayPos = (state.replayPos - 1 + state.queue.length) % (state.queue.length || 1);
+  else if (cur) { const q = state.queue.findLast(q => q.played && q.id === cur.id); if (q) q.played = false; }
   state.now = state.history.pop();
   return state.now;
 }
 
 const json = (obj, status = 200) => Response.json(obj, { status, headers: { 'Cache-Control': 'no-store' } });
-const publicState = s => ({ now: s.now, queue: s.queue, fallback: s.fallback, fallbackPos: s.fallbackPos, cmd: s.cmd, volume: s.volume });
+const publicState = s => ({ now: s.now, queue: s.queue, replayPos: s.replayPos, cmd: s.cmd, volume: s.volume });
 
 async function route(req, p) {
   if (req.method === 'GET' && p === 'search') {
@@ -124,7 +124,7 @@ async function route(req, p) {
   // 이하 관리자 전용
   if (b.password !== ADMIN_PASSWORD) return json({ error: '비밀번호가 틀렸어요' }, 403);
 
-  if (p === 'admin/check') return json({ fallback: state.fallback });
+  if (p === 'admin/check') return json({ ok: true });
   // 원격 조작: 플레이어가 3초마다 cmd.seq·volume 변화를 보고 실행
   if (p === 'admin/cmd' && ['prev', 'toggle', 'next'].includes(b.type)) {
     state.cmd = { seq: state.cmd.seq + 1, type: b.type };
@@ -137,13 +137,6 @@ async function route(req, p) {
     return done(publicState(state));
   }
   if (p === 'admin/remove') { state.queue = state.queue.filter(q => q.id !== b.id); return done(publicState(state)); }
-  if (p === 'admin/fallback') {
-    const ids = [...new Set(String(b.urls || '').split('\n').map(videoId).filter(Boolean))];
-    const found = (await Promise.all(ids.map(id => lookup(id).catch(() => null)))).filter(Boolean);
-    state.fallback = found;
-    state.fallbackPos = 0;
-    return done({ fallback: found, skipped: ids.length - found.length });
-  }
   return json({ error: 'not found' }, 404);
 }
 
