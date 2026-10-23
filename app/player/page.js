@@ -8,11 +8,14 @@ export default function Player() {
   const [ready, setReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
+  const [kicked, setKicked] = useState(false); // 다른 곳에서 플레이어를 켜서 밀려남
   const host = useRef(null);
   const yt = useRef(null);
   const cur = useRef(null);
   const cmdSeq = useRef(null);
   const vol = useRef(100);
+  const pid = useRef(null); // 이 플레이어의 id (시작할 때마다 새로)
+  const kickedRef = useRef(false);
 
   const setCur = v => { cur.current = v; setCurrent(v); };
 
@@ -50,26 +53,40 @@ export default function Player() {
     });
   }
 
+  // 다른 곳에서 플레이어가 켜지면 여기는 멈춘다
+  function kick() {
+    kickedRef.current = true;
+    setKicked(true);
+    yt.current?.pauseVideo?.();
+  }
+
   async function go(dir) {
-    const { now } = await post(`/api/${dir}`);
-    setCur(now);
-    if (now) play(now.id);
+    if (kickedRef.current) return;
+    try {
+      const { now } = await post(`/api/${dir}`, { pid: pid.current });
+      setCur(now);
+      if (now) play(now.id);
+    } catch (err) { if (/다른 곳/.test(err.message)) kick(); }
   }
 
   // 관리자 화면 진행률용: 지금 재생 위치를 서버에 알림
   function report() {
     const p = yt.current;
     if (!p?.getCurrentTime || !cur.current) return;
-    post('/api/progress', { id: cur.current.id, t: p.getCurrentTime(), d: p.getDuration(), playing: p.getPlayerState() === 1 }).catch(() => {});
+    if (kickedRef.current) return;
+    post('/api/progress', { pid: pid.current, id: cur.current.id, t: p.getCurrentTime(), d: p.getDuration(), playing: p.getPlayerState() === 1 }).catch(() => {});
   }
   const seek = t => { yt.current?.seekTo?.(t, true); setTimeout(report, 800); };
 
   const toggle = () => { const p = yt.current; if (p) p.getPlayerState() === 1 ? p.pauseVideo() : p.playVideo(); };
 
-  // 브라우저 자동재생 정책 때문에 한 번은 클릭 필요
+  // 브라우저 자동재생 정책 때문에 한 번은 클릭 필요. "여기서 다시 틀기"도 이걸 다시 부른다
   async function start() {
+    pid.current = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36); // http(IP 접속)에선 randomUUID 없음
+    const x = await post('/api/claim', { pid: pid.current }); // 이제 여기가 플레이어
+    kickedRef.current = false;
+    setKicked(false);
     setStarted(true);
-    const x = await getState();
     setS(x);
     cmdSeq.current = x.cmd.seq;
     vol.current = x.volume ?? 100;
@@ -82,6 +99,8 @@ export default function Player() {
       const x = await getState().catch(() => null);
       if (!x) return;
       setS(x);
+      if (kickedRef.current) return;
+      if (x.playerId && x.playerId !== pid.current) return kick();
       if ((x.volume ?? 100) !== vol.current) { vol.current = x.volume ?? 100; yt.current?.setVolume?.(vol.current); } // 관리자 음량
       if (x.cmd.seq !== cmdSeq.current) { // 관리자 원격 조작
         cmdSeq.current = x.cmd.seq;
@@ -97,7 +116,7 @@ export default function Player() {
   return (
     <>
       <Topbar title="사무실 플레이어" sub="신청곡을 순서대로, 새 신청곡이 없으면 처음부터 다시 재생해요">
-        {started && (
+        {started && !kicked && (
           <div className="right ctrl">
             <span className="chip">🔊 {s?.volume ?? 100}</span>
             <button className="btn line" onClick={() => go('prev')}>⏮ 이전곡</button>
@@ -112,6 +131,12 @@ export default function Player() {
             <div ref={host} className="host" />
             {!started && <button className="btn red start" disabled={!ready} onClick={start}>▶ 플레이어 시작</button>}
           </div>
+          {kicked && (
+            <div className="note err kicked">
+              다른 곳에서 플레이어가 켜져서 여기는 멈췄어요. 플레이어는 한 곳에서만 틀 수 있어요.
+              <button className="btn red sm" onClick={start}>여기서 다시 틀기</button>
+            </div>
+          )}
           <NowCard now={current} paused={paused} />
         </main>
         <aside className="card"><RequestList s={view} /></aside>
