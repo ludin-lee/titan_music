@@ -20,10 +20,19 @@ async function redis(...cmd) {
 }
 
 // ponytail: 상태 전체를 JSON 한 덩어리로 읽고 씀. 동시에 두 명이 바꾸면 한쪽이 덮일 수 있음 — 사무실 규모에선 드묾, 문제되면 항목별 키로 쪼갤 것
+// 재생 위치(progress)는 플레이어가 자주 쓰므로 state와 덮어쓰기 경쟁이 없게 따로 둔다
+let localProgress = null; // 로컬 실행용
 async function load() {
-  if (REDIS_URL) return { ...EMPTY, ...JSON.parse((await redis('GET', 'state')) || '{}') };
+  if (REDIS_URL) {
+    const [state, progress] = await redis('MGET', 'state', 'progress');
+    return [{ ...EMPTY, ...JSON.parse(state || '{}') }, JSON.parse(progress || 'null')];
+  }
   if (process.env.VERCEL) throw new Error('저장소가 연결되지 않았어요. Vercel 프로젝트 Storage에서 Upstash Redis를 연결해주세요');
-  try { return { ...EMPTY, ...JSON.parse(fs.readFileSync(DATA, 'utf8')) }; } catch { return { ...EMPTY }; }
+  try { return [{ ...EMPTY, ...JSON.parse(fs.readFileSync(DATA, 'utf8')) }, localProgress]; } catch { return [{ ...EMPTY }, localProgress]; }
+}
+async function saveProgress(progress) {
+  if (REDIS_URL) return redis('SET', 'progress', JSON.stringify(progress));
+  localProgress = progress;
 }
 async function save(state) {
   if (REDIS_URL) return redis('SET', 'state', JSON.stringify(state));
@@ -93,18 +102,28 @@ function prev(state) {
 }
 
 const json = (obj, status = 200) => Response.json(obj, { status, headers: { 'Cache-Control': 'no-store' } });
-const publicState = s => ({ now: s.now, queue: s.queue, replayPos: s.replayPos, cmd: s.cmd, volume: s.volume });
+// serverNow: 화면이 서버 시계 기준으로 진행률을 계산하도록
+const publicState = (s, progress) => ({ now: s.now, queue: s.queue, replayPos: s.replayPos, cmd: s.cmd, volume: s.volume, progress, serverNow: Date.now() });
 
 async function route(req, p) {
   if (req.method === 'GET' && p === 'search') {
     const q = (new URL(req.url).searchParams.get('q') || '').trim().slice(0, 100);
     return json(q ? await search(q) : []);
   }
-  const state = await load();
-  if (req.method === 'GET' && p === 'state') return json(publicState(state));
+  const [state, progress] = await load();
+  const pub = () => publicState(state, progress);
+  if (req.method === 'GET' && p === 'state') return json(pub());
   if (req.method !== 'POST') return json({ error: 'not found' }, 404);
   const b = await req.json().catch(() => ({}));
   const done = async out => { await save(state); return json(out); };
+
+  // 플레이어가 지금 재생 위치를 알림 (곡 id, 현재 초, 전체 초, 재생 중인지)
+  if (p === 'progress') {
+    const t = Number(b.t), d = Number(b.d);
+    if (!/^[\w-]{11}$/.test(b.id || '') || !(t >= 0) || !(d >= 0)) return json({ error: 'bad progress' }, 400);
+    await saveProgress({ id: b.id, t, d, playing: !!b.playing, at: Date.now() });
+    return json({ ok: true });
+  }
 
   if (p === 'queue') {
     const by = String(b.by || '').trim().slice(0, 20);
@@ -117,7 +136,7 @@ async function route(req, p) {
     if (!v) return json({ error: '영상을 찾을 수 없어요 (비공개/삭제됨?)' }, 400);
     if (state.queue.some(q => q.id === id && !q.played)) return json({ error: '이미 예약된 곡이에요' }, 400);
     state.queue.push({ ...v, by });
-    return done(publicState(state));
+    return done(pub());
   }
   // ponytail: 플레이어 페이지용이라 비밀번호 없음. 장난치는 사람 생기면 플레이어 전용 토큰 추가
   if (p === 'next') { const now = next(state); return done({ now }); }
@@ -128,17 +147,19 @@ async function route(req, p) {
 
   if (p === 'admin/check') return json({ ok: true });
   // 원격 조작: 플레이어가 3초마다 cmd.seq·volume 변화를 보고 실행
-  if (p === 'admin/cmd' && ['prev', 'toggle', 'next'].includes(b.type)) {
-    state.cmd = { seq: state.cmd.seq + 1, type: b.type };
-    return done(publicState(state));
+  if (p === 'admin/cmd' && ['prev', 'toggle', 'next', 'seek'].includes(b.type)) {
+    const t = Number(b.t);
+    if (b.type === 'seek' && !(t >= 0)) return json({ error: '이동할 시간이 잘못됐어요' }, 400);
+    state.cmd = { seq: state.cmd.seq + 1, type: b.type, ...(b.type === 'seek' && { t }) };
+    return done(pub());
   }
   if (p === 'admin/volume') {
     const v = Math.round(Number(b.volume));
     if (!(v >= 0 && v <= 100)) return json({ error: '음량은 0~100' }, 400);
     state.volume = v;
-    return done(publicState(state));
+    return done(pub());
   }
-  if (p === 'admin/remove') { state.queue = state.queue.filter(q => q.id !== b.id); return done(publicState(state)); }
+  if (p === 'admin/remove') { state.queue = state.queue.filter(q => q.id !== b.id); return done(pub()); }
   return json({ error: 'not found' }, 404);
 }
 

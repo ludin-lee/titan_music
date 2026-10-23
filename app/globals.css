@@ -107,3 +107,9 @@ details.card[open] > summary::after { content: '닫기'; }
 .field { display: block; margin-bottom: 10px; }
 .field > span { display: block; font-size: 14px; font-weight: 700; margin-bottom: 6px; }
 .field em { color: var(--red); font-style: normal; }
+
+/* 관리자 진행률 */
+.prog { display: flex; align-items: center; gap: 10px; margin-top: 14px; font-size: 13px; font-weight: 600; color: var(--ink2); font-variant-numeric: tabular-nums; }
+.prog input[type=range] { flex: 1; padding: 0; border: 0; accent-color: var(--red); background: none; }
+.prog input[type=range]:focus { outline: none; }
+.prog.wait { font-weight: 500; }
