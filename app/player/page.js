@@ -8,7 +8,9 @@ export default function Player() {
   const [ready, setReady] = useState(false);
   const [started, setStarted] = useState(false);
   const [paused, setPaused] = useState(false);
-  const [kicked, setKicked] = useState(false); // 다른 곳에서 플레이어를 켜서 밀려남
+  const [kicked, setKicked] = useState(false); // 오래 멈춰 있는 사이 다른 곳에서 플레이어를 켜서 밀려남
+  const [notice, setNotice] = useState('');    // 시작 거절·다음 곡 실패 안내
+  const [pw, setPw] = useState('');            // 플레이어 시작 비밀번호 (맞으면 이 PC에 기억)
   const host = useRef(null);
   const yt = useRef(null);
   const cur = useRef(null);
@@ -16,6 +18,7 @@ export default function Player() {
   const vol = useRef(100);
   const pid = useRef(null); // 이 플레이어의 id (시작할 때마다 새로)
   const kickedRef = useRef(false);
+  const going = useRef(false); // 다음곡 요청 중복 방지
 
   const setCur = v => { cur.current = v; setCurrent(v); };
 
@@ -30,6 +33,8 @@ export default function Player() {
 
   // 시작 전에도 목록은 보이게
   useEffect(() => { getState().then(x => { setS(x); setCur(x.now); }).catch(() => {}); }, []);
+
+  useEffect(() => { try { setPw(localStorage.getItem('playerPw') || ''); } catch {} }, []);
 
   useEffect(() => { document.title = current ? `🎵 ${current.title}` : '사무실 플레이어'; }, [current]);
 
@@ -60,13 +65,25 @@ export default function Player() {
     yt.current?.pauseVideo?.();
   }
 
+  // 실패하면 2초 간격으로 3번까지 다시 시도. 그래도 안 되면 안내를 띄우고, 3초 점검이 계속 다시 시도한다
   async function go(dir) {
-    if (kickedRef.current) return;
+    if (kickedRef.current || going.current) return;
+    going.current = true;
     try {
-      const { now } = await post(`/api/${dir}`, { pid: pid.current });
-      setCur(now);
-      if (now) play(now.id);
-    } catch (err) { if (/다른 곳/.test(err.message)) kick(); }
+      for (let i = 0; ; i++) {
+        try {
+          const { now } = await post(`/api/${dir}`, { pid: pid.current });
+          setNotice('');
+          setCur(now);
+          if (now) play(now.id);
+          return;
+        } catch (err) {
+          if (/다른 곳/.test(err.message)) return kick();
+          if (i >= 2) return setNotice(`다음 곡을 불러오지 못했어요. 계속 다시 시도하는 중이에요 (${err.message})`);
+          await new Promise(r => setTimeout(r, 2000));
+        }
+      }
+    } finally { going.current = false; }
   }
 
   // 관리자 화면 진행률용: 지금 재생 위치를 서버에 알림
@@ -82,8 +99,12 @@ export default function Player() {
 
   // 브라우저 자동재생 정책 때문에 한 번은 클릭 필요. "여기서 다시 틀기"도 이걸 다시 부른다
   async function start() {
-    pid.current = crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36); // http(IP 접속)에선 randomUUID 없음
-    const x = await post('/api/claim', { pid: pid.current }); // 이제 여기가 플레이어
+    pid.current ??= crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36); // http(IP 접속)에선 randomUUID 없음
+    let x;
+    try { x = await post('/api/claim', { pid: pid.current, password: pw }); } // 비밀번호 확인 + 먼저 켠 플레이어가 살아 있으면 거절
+    catch (err) { return setNotice(err.message); }
+    try { localStorage.setItem('playerPw', pw); } catch {}
+    setNotice('');
     kickedRef.current = false;
     setKicked(false);
     setStarted(true);
@@ -106,6 +127,7 @@ export default function Player() {
         cmdSeq.current = x.cmd.seq;
         ({ prev: () => go('prev'), next: () => go('next'), toggle, seek: () => seek(x.cmd.t) })[x.cmd.type]?.();
       } else if (!cur.current && x.queue.length) go('next'); // 멈춰 있다가 곡이 생김
+      else if (cur.current && yt.current?.getPlayerState?.() === 0) go('next'); // 곡이 끝났는데 다음 곡으로 못 넘어간 경우
     }, 3000);
     // ponytail: 위치는 15초마다만 보내고 그 사이는 관리자 화면이 시간을 이어 계산 (Redis 사용량 절약)
     const r = setInterval(report, 15000);
@@ -129,12 +151,23 @@ export default function Player() {
         <main>
           <div className="stage">
             <div ref={host} className="host" />
-            {!started && <button className="btn red start" disabled={!ready} onClick={start}>▶ 플레이어 시작</button>}
+            {!started && (
+              <form className="startbox" onSubmit={e => { e.preventDefault(); start(); }}>
+                <input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="플레이어 비밀번호" aria-label="플레이어 비밀번호" required />
+                <button className="btn red start" disabled={!ready}>▶ 플레이어 시작</button>
+              </form>
+            )}
           </div>
+          {notice && (
+            <div className="note err kicked">
+              {notice}
+              {!started && !/비밀번호/.test(notice) && <button className="btn red sm" onClick={() => start()}>다시 시도</button>}
+            </div>
+          )}
           {kicked && (
             <div className="note err kicked">
-              다른 곳에서 플레이어가 켜져서 여기는 멈췄어요. 플레이어는 한 곳에서만 틀 수 있어요.
-              <button className="btn red sm" onClick={start}>여기서 다시 틀기</button>
+              이 플레이어가 오래 응답이 없어서 다른 곳의 플레이어로 넘어갔어요. 플레이어는 한 곳에서만 틀 수 있어요.
+              <button className="btn red sm" onClick={() => start()}>여기서 다시 틀기</button>
             </div>
           )}
           <NowCard now={current} paused={paused} />

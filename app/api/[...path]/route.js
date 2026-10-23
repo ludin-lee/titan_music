@@ -5,6 +5,7 @@ import path from 'path';
 export const dynamic = 'force-dynamic';
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
+const PLAYER_PASSWORD = process.env.PLAYER_PASSWORD || ADMIN_PASSWORD; // 플레이어 시작용, 없으면 관리자 비밀번호
 const DATA = path.join(process.cwd(), 'data.json');
 // Vercel 마켓플레이스에서 Upstash를 연결하면 둘 중 한 이름으로 들어온다
 const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
@@ -101,6 +102,16 @@ function prev(state) {
   return state.now;
 }
 
+// 먼저 켠 플레이어가 아직 살아 있는지. 마지막 신호(시작·다음곡·위치 보고) 후 2분,
+// 또는 재생 중이던 곡이 끝날 시간 + 2분까지는 살아 있다고 본다 (브라우저 탭 절전으로 보고가 끊겨도 곡은 계속 나오므로)
+const GRACE = 2 * 60 * 1000;
+function ownerAlive(state, progress, now = Date.now()) {
+  if (!state.playerId) return false;
+  const seen = Math.max(state.playerSeen || 0, progress?.at || 0);
+  if (now - seen < GRACE) return true;
+  return !!progress?.playing && now < progress.at + (progress.d - progress.t) * 1000 + GRACE;
+}
+
 const json = (obj, status = 200) => Response.json(obj, { status, headers: { 'Cache-Control': 'no-store' } });
 // serverNow: 화면이 서버 시계 기준으로 진행률을 계산하도록
 const publicState = (s, progress) => ({ playerId: s.playerId, now: s.now, queue: s.queue, replayPos: s.replayPos, cmd: s.cmd, volume: s.volume, progress, serverNow: Date.now() });
@@ -117,10 +128,15 @@ async function route(req, p) {
   const b = await req.json().catch(() => ({}));
   const done = async out => { await save(state); return json(out); };
 
-  // 플레이어는 한 곳만: 마지막으로 시작한 플레이어(pid)가 주인, 나머지의 다음곡·위치 보고는 거절
+  // 플레이어는 한 곳만: 먼저 켠 플레이어(pid)가 주인. 주인이 살아 있으면 나중에 켠 쪽은 거절
   if (p === 'claim') {
     if (!/^[\w-]{8,64}$/.test(b.pid || '')) return json({ error: 'bad pid' }, 400);
+    if (b.password !== PLAYER_PASSWORD) return json({ error: '플레이어 비밀번호가 틀렸어요' }, 403);
+    if (b.pid !== state.playerId && ownerAlive(state, progress)) {
+      return json({ error: '이미 다른 곳에서 플레이어가 켜져 있어요. 그쪽을 끄면 2분쯤 뒤에 여기서 틀 수 있어요', busy: true }, 409);
+    }
     state.playerId = b.pid;
+    state.playerSeen = Date.now();
     return done(pub());
   }
   if (['progress', 'next', 'prev'].includes(p) && state.playerId && b.pid !== state.playerId) {
@@ -149,8 +165,11 @@ async function route(req, p) {
     return done(pub());
   }
   // ponytail: 플레이어 페이지용이라 비밀번호 없음. 장난치는 사람 생기면 플레이어 전용 토큰 추가
-  if (p === 'next') { const now = next(state); return done({ now }); }
-  if (p === 'prev') { const now = prev(state); return done({ now }); }
+  if (p === 'next' || p === 'prev') {
+    state.playerSeen = Date.now();
+    const now = (p === 'next' ? next : prev)(state);
+    return done({ now });
+  }
 
   // 이하 관리자 전용
   if (b.password !== ADMIN_PASSWORD) return json({ error: '비밀번호가 틀렸어요' }, 403);
