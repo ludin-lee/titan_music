@@ -115,3 +115,6 @@ details.card[open] > summary::after { content: '닫기'; }
 .prog.wait { font-weight: 500; }
 
 .note.kicked { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between; }
+
+.stage .startbox { display: grid; gap: 10px; width: min(280px, 80%); z-index: 1; }
+.stage .startbox input { text-align: center; }
