@@ -45,47 +45,40 @@ export function Row({ v, sub, chip, red, cls = '', children }) {
 }
 
 export function NowCard({ now, paused }) {
-  if (!now) return <div className="now empty">재생 중인 곡이 없어요. 노래를 신청하거나 관리자가 기본 리스트를 등록해주세요.</div>;
+  if (!now) return <div className="now empty">재생 중인 곡이 없어요. 듣고 싶은 노래를 신청해주세요.</div>;
   return (
     <div className="now">
       <img src={thumb(now.id)} alt="" />
       <div>
         <div className="k">{paused ? '⏸ 일시정지' : <><b>●</b> 지금 재생 중</>}</div>
         <div className="v">{now.title}</div>
-        <div className="s">{now.by ? `${now.by} 님 신청` : '기본 리스트'}</div>
+        <div className="s">{now.by && `${now.by} 님 신청`}{now.replay && ' · 다시 듣기'}</div>
       </div>
     </div>
   );
 }
 
-// 받은 신청곡 전체: 접수 순서대로, 재생 중 / 재생됨 / 대기
+// 받은 신청곡 전체: 접수 순서대로, 재생 중 / 대기 / 재생됨. 새 신청곡이 없으면 처음부터 다시 재생하므로 그 차례를 '다음'으로
 export function RequestList({ s, extra }) {
   const q = s?.queue || [];
-  const playingIdx = s?.now?.by ? q.findLastIndex(x => x.played && x.id === s.now.id) : -1;
+  const playingIdx = s?.now ? (s.now.replay
+    ? (s.replayPos - 1 + q.length) % (q.length || 1)
+    : q.findLastIndex(x => x.played && x.id === s.now.id)) : -1;
+  const waiting = q.filter(x => !x.played).length;
+  const nextIdx = waiting || !q.length ? -1 : s.replayPos % q.length;
   return (
     <>
-      <h2>받은 신청곡 <small>총 {q.length}곡 · 대기 {q.filter(x => !x.played).length}곡</small></h2>
+      <h2>받은 신청곡 <small>총 {q.length}곡 · 대기 {waiting}곡</small></h2>
+      {!waiting && q.length > 0 && <p className="hint">새 신청곡이 없으면 처음부터 다시 재생해요</p>}
       <ul className="list">
         {q.length ? q.map((x, i) => (
           <Row key={`${x.id}-${i}`} v={x} sub={`${x.by} 님`}
-            chip={i === playingIdx ? '재생 중' : x.played ? '재생됨' : '대기'} red={i === playingIdx}
+            chip={i === playingIdx ? '재생 중' : i === nextIdx ? '다음' : x.played ? '재생됨' : '대기'} red={i === playingIdx}
             cls={i === playingIdx ? 'playing' : x.played ? 'done' : ''}>
             {extra?.(x)}
           </Row>
         )) : <li className="empty-msg">아직 신청곡이 없어요<br />신청하면 다음 곡으로 나와요</li>}
       </ul>
     </>
-  );
-}
-
-export function BaseList({ s }) {
-  const list = s?.fallback || [];
-  return (
-    <ul className="list">
-      {list.length ? list.map((v, i) => {
-        const playing = !s.now?.by && s.now?.id === v.id;
-        return <Row key={`${v.id}-${i}`} v={v} chip={playing ? '재생 중' : i === s.fallbackPos ? '다음' : ''} red={playing} cls={playing ? 'playing' : ''} />;
-      }) : <li className="empty-msg">비어 있어요</li>}
-    </ul>
   );
 }

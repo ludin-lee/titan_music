@@ -102,4 +102,4 @@ details.card[open] > summary::after { content: '닫기'; }
 
 .note.err { background: var(--red-soft); color: var(--t-red-dark, #B3000E); margin: 0; font-weight: 600; }
 
-.sub-h { font-size: 14px; font-weight: 700; margin: 20px 0 8px; }
+.hint { font-size: 13px; color: var(--ink2); margin: -6px 0 10px; }

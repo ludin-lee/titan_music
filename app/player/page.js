@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { BaseList, NowCard, RequestList, Topbar, getState, post } from '../ui';
+import { NowCard, RequestList, Topbar, getState, post } from '../ui';
 
 export default function Player() {
   const [s, setS] = useState(null);
@@ -74,7 +74,7 @@ export default function Player() {
       if (x.cmd.seq !== cmdSeq.current) { // 관리자 원격 조작
         cmdSeq.current = x.cmd.seq;
         ({ prev: () => go('prev'), next: () => go('next'), toggle })[x.cmd.type]?.();
-      } else if (!cur.current && (x.queue.some(q => !q.played) || x.fallback.length)) go('next'); // 멈춰 있다가 곡이 생김
+      } else if (!cur.current && x.queue.length) go('next'); // 멈춰 있다가 곡이 생김
     }, 3000);
     return () => clearInterval(t);
   }, [started]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -82,7 +82,7 @@ export default function Player() {
   const view = s && { ...s, now: current };
   return (
     <>
-      <Topbar title="사무실 플레이어" sub="신청곡 먼저, 없으면 기본 리스트를 순서대로 반복해요">
+      <Topbar title="사무실 플레이어" sub="신청곡을 순서대로, 새 신청곡이 없으면 처음부터 다시 재생해요">
         {started && (
           <div className="right ctrl">
             <span className="chip">🔊 {s?.volume ?? 100}</span>
@@ -99,10 +99,6 @@ export default function Player() {
             {!started && <button className="btn red start" disabled={!ready} onClick={start}>▶ 플레이어 시작</button>}
           </div>
           <NowCard now={current} paused={paused} />
-          <section className="card">
-            <h2>기본 리스트 <small>신청곡이 없을 때 순서대로 반복</small></h2>
-            <BaseList s={view} />
-          </section>
         </main>
         <aside className="card"><RequestList s={view} /></aside>
       </div>
