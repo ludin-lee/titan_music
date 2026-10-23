@@ -113,3 +113,5 @@ details.card[open] > summary::after { content: '닫기'; }
 .prog input[type=range] { flex: 1; padding: 0; border: 0; accent-color: var(--red); background: none; }
 .prog input[type=range]:focus { outline: none; }
 .prog.wait { font-weight: 500; }
+
+.note.kicked { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; justify-content: space-between; }

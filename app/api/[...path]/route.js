@@ -103,7 +103,7 @@ function prev(state) {
 
 const json = (obj, status = 200) => Response.json(obj, { status, headers: { 'Cache-Control': 'no-store' } });
 // serverNow: 화면이 서버 시계 기준으로 진행률을 계산하도록
-const publicState = (s, progress) => ({ now: s.now, queue: s.queue, replayPos: s.replayPos, cmd: s.cmd, volume: s.volume, progress, serverNow: Date.now() });
+const publicState = (s, progress) => ({ playerId: s.playerId, now: s.now, queue: s.queue, replayPos: s.replayPos, cmd: s.cmd, volume: s.volume, progress, serverNow: Date.now() });
 
 async function route(req, p) {
   if (req.method === 'GET' && p === 'search') {
@@ -116,6 +116,16 @@ async function route(req, p) {
   if (req.method !== 'POST') return json({ error: 'not found' }, 404);
   const b = await req.json().catch(() => ({}));
   const done = async out => { await save(state); return json(out); };
+
+  // 플레이어는 한 곳만: 마지막으로 시작한 플레이어(pid)가 주인, 나머지의 다음곡·위치 보고는 거절
+  if (p === 'claim') {
+    if (!/^[\w-]{8,64}$/.test(b.pid || '')) return json({ error: 'bad pid' }, 400);
+    state.playerId = b.pid;
+    return done(pub());
+  }
+  if (['progress', 'next', 'prev'].includes(p) && state.playerId && b.pid !== state.playerId) {
+    return json({ error: '다른 곳에서 플레이어가 켜져 있어요', taken: true }, 409);
+  }
 
   // 플레이어가 지금 재생 위치를 알림 (곡 id, 현재 초, 전체 초, 재생 중인지)
   if (p === 'progress') {
