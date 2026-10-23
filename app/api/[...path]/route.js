@@ -128,12 +128,13 @@ async function route(req, p) {
   const b = await req.json().catch(() => ({}));
   const done = async out => { await save(state); return json(out); };
 
-  // 플레이어는 한 곳만: 먼저 켠 플레이어(pid)가 주인. 주인이 살아 있으면 나중에 켠 쪽은 거절
+  // 플레이어는 한 곳만: 먼저 켠 플레이어(pid)가 주인. 주인이 살아 있으면 나중에 켠 쪽은 거절하되,
+  // 비밀번호를 아는 사람이 force로 "기존 플레이어 끊고 여기서 틀기"를 고르면 넘겨준다 (중복 로그인 처리처럼)
   if (p === 'claim') {
     if (!/^[\w-]{8,64}$/.test(b.pid || '')) return json({ error: 'bad pid' }, 400);
     if (b.password !== PLAYER_PASSWORD) return json({ error: '플레이어 비밀번호가 틀렸어요' }, 403);
-    if (b.pid !== state.playerId && ownerAlive(state, progress)) {
-      return json({ error: '이미 다른 곳에서 플레이어가 켜져 있어요. 그쪽을 끄면 2분쯤 뒤에 여기서 틀 수 있어요', busy: true }, 409);
+    if (!b.force && b.pid !== state.playerId && ownerAlive(state, progress)) {
+      return json({ error: '이미 다른 곳에서 플레이어가 켜져 있어요', busy: true }, 409);
     }
     state.playerId = b.pid;
     state.playerSeen = Date.now();

@@ -10,6 +10,7 @@ export default function Player() {
   const [paused, setPaused] = useState(false);
   const [kicked, setKicked] = useState(false); // 오래 멈춰 있는 사이 다른 곳에서 플레이어를 켜서 밀려남
   const [notice, setNotice] = useState('');    // 시작 거절·다음 곡 실패 안내
+  const [busy, setBusy] = useState(false);     // 다른 곳에서 플레이어가 켜져 있음 → 끊고 가져올지 선택
   const [pw, setPw] = useState('');            // 플레이어 시작 비밀번호 (맞으면 이 PC에 기억)
   const host = useRef(null);
   const yt = useRef(null);
@@ -98,11 +99,15 @@ export default function Player() {
   const toggle = () => { const p = yt.current; if (p) p.getPlayerState() === 1 ? p.pauseVideo() : p.playVideo(); };
 
   // 브라우저 자동재생 정책 때문에 한 번은 클릭 필요. "여기서 다시 틀기"도 이걸 다시 부른다
-  async function start() {
+  async function start(force = false) {
     pid.current ??= crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36); // http(IP 접속)에선 randomUUID 없음
     let x;
-    try { x = await post('/api/claim', { pid: pid.current, password: pw }); } // 비밀번호 확인 + 먼저 켠 플레이어가 살아 있으면 거절
-    catch (err) { return setNotice(err.message); }
+    try { x = await post('/api/claim', { pid: pid.current, password: pw, force }); } // 비밀번호 확인 + 먼저 켠 플레이어가 살아 있으면 거절
+    catch (err) {
+      if (/이미 다른 곳/.test(err.message)) { setNotice(''); return setBusy(true); }
+      return setNotice(err.message);
+    }
+    setBusy(false);
     try { localStorage.setItem('playerPw', pw); } catch {}
     setNotice('');
     kickedRef.current = false;
@@ -158,6 +163,15 @@ export default function Player() {
               </form>
             )}
           </div>
+          {busy && (
+            <div className="note err kicked">
+              <span>이미 다른 곳에서 플레이어가 켜져 있어요.<br />기존 플레이어를 끊고 여기서 틀까요? 기존 쪽은 몇 초 안에 멈춰요.</span>
+              <span className="ctrl">
+                <button className="btn sm line" onClick={() => setBusy(false)}>취소</button>
+                <button className="btn red sm" onClick={() => start(true)}>기존 플레이어 끊고 여기서 틀기</button>
+              </span>
+            </div>
+          )}
           {notice && (
             <div className="note err kicked">
               {notice}
@@ -166,7 +180,7 @@ export default function Player() {
           )}
           {kicked && (
             <div className="note err kicked">
-              이 플레이어가 오래 응답이 없어서 다른 곳의 플레이어로 넘어갔어요. 플레이어는 한 곳에서만 틀 수 있어요.
+              다른 곳에서 플레이어를 넘겨받아서 여기는 멈췄어요. 플레이어는 한 곳에서만 틀 수 있어요.
               <button className="btn red sm" onClick={() => start()}>여기서 다시 틀기</button>
             </div>
           )}
