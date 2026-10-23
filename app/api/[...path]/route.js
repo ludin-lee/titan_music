@@ -109,6 +109,8 @@ async function route(req, p) {
   if (p === 'queue') {
     const by = String(b.by || '').trim().slice(0, 20);
     if (!by) return json({ error: '이름을 입력해주세요' }, 400);
+    // 안내 문구를 그대로 따라 친 경우 ("이름(필수)" 등)
+    if (['이름', '이름필수', '필수', '익명', 'name'].includes(by.replace(/[\s()]/g, '').toLowerCase())) return json({ error: '본인 이름을 입력해주세요' }, 400);
     const id = videoId(b.url);
     if (!id) return json({ error: '유튜브 링크를 확인해주세요' }, 400);
     const v = await lookup(id).catch(() => null);

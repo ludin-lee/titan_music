@@ -6,6 +6,7 @@ export default function Home() {
   const [s, setS] = useState(null);
   const [loadErr, setLoadErr] = useState('');
   const [by, setBy] = useState('');
+  const byRef = useRef();
   const [q, setQ] = useState('');
   const [msg, setMsg] = useState({ text: '', err: false });
   const [results, setResults] = useState([]);
@@ -33,7 +34,7 @@ export default function Home() {
   }
 
   async function reserve(url) {
-    if (!by.trim()) return setMsg({ text: '이름을 먼저 입력해주세요', err: true });
+    if (!by.trim()) { byRef.current?.focus(); return setMsg({ text: '신청자 이름을 먼저 입력해주세요', err: true }); }
     localStorage.setItem('by', by);
     try {
       setS(await post('/api/queue', { url, by }));
@@ -68,7 +69,10 @@ export default function Home() {
           <section className="card">
             <h2>신청하기 <small>노래 제목으로 검색하거나 유튜브 링크를 붙여넣으세요</small></h2>
             <form onSubmit={onSearch}>
-              <input value={by} onChange={e => setBy(e.target.value)} placeholder="이름 (필수)" maxLength={20} required aria-label="이름" style={{ marginBottom: 8 }} />
+              <label className="field">
+                <span>신청자 이름 <em>*</em></span>
+                <input ref={byRef} value={by} onChange={e => setBy(e.target.value)} placeholder="예) 홍길동" maxLength={20} required />
+              </label>
               <div className="search">
                 <input type="search" value={q} onChange={e => setQ(e.target.value)} placeholder="예) 아이유 밤편지" required />
                 <button className="btn red">검색</button>
