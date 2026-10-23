@@ -2,6 +2,37 @@
 import { useEffect, useRef, useState } from 'react';
 import { NowCard, RequestList, Row, Topbar, getState, post, searchYT, usePoll } from './ui';
 
+const fmt = sec => { sec = Math.max(0, Math.floor(sec)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
+
+// 관리자: 지금 곡 진행률 + 끌어서 시간 이동.
+// 플레이어는 15초마다·재생/일시정지 때만 위치를 보내므로 그 사이 시간은 여기서 이어 계산한다
+function Progress({ s, offset, onSeek }) {
+  const [, tick] = useState(0);
+  const [drag, setDrag] = useState(null);  // 끄는 중인 값
+  const [hold, setHold] = useState(null);  // 이동 요청 후 플레이어가 반영할 때까지 보여줄 값 {t, at}
+  useEffect(() => { const i = setInterval(() => tick(x => x + 1), 1000); return () => clearInterval(i); }, []);
+
+  const p = s?.progress;
+  if (!p || p.id !== s.now?.id || !p.d) return <div className="prog wait">재생 위치를 기다리는 중… (최대 15초)</div>;
+  const nowMs = Date.now() + offset;
+  const since = at => (p.playing ? (nowMs - at) / 1000 : 0);
+  const useHold = hold && p.at < hold.at && nowMs - hold.at < 10000;
+  const t = Math.min(p.d, useHold ? hold.t + since(hold.at) : p.t + since(p.at));
+  const commit = () => {
+    if (drag == null) return;
+    onSeek(drag); setHold({ t: drag, at: nowMs }); setDrag(null);
+  };
+
+  return (
+    <div className="prog">
+      <span>{fmt(drag ?? t)}</span>
+      <input type="range" min="0" max={Math.floor(p.d)} step="1" value={Math.floor(drag ?? t)} aria-label="재생 위치"
+        onChange={e => setDrag(Number(e.target.value))} onPointerUp={commit} onKeyUp={commit} />
+      <span>{fmt(p.d)}</span>
+    </div>
+  );
+}
+
 export default function Home() {
   const [s, setS] = useState(null);
   const [loadErr, setLoadErr] = useState('');
@@ -15,8 +46,9 @@ export default function Home() {
   const [admin, setAdmin] = useState(false);
   const [vol, setVol] = useState(100);
   const volTimer = useRef();
+  const offset = useRef(0); // 서버 시계 - 내 시계
 
-  const refresh = () => getState().then(x => { setS(x); setLoadErr(''); }).catch(e => setLoadErr(e.message));
+  const refresh = () => getState().then(x => { setS(x); setLoadErr(''); offset.current = x.serverNow - Date.now(); }).catch(e => setLoadErr(e.message));
   usePoll(refresh, 5000);
   useEffect(() => setBy(localStorage.getItem('by') || ''), []);
 
@@ -49,7 +81,7 @@ export default function Home() {
     } catch (err) { alert(err.message); }
   }
 
-  const cmd = type => post('/api/admin/cmd', { password: pw, type }).then(() => setTimeout(refresh, 3500));
+  const cmd = (type, extra) => post('/api/admin/cmd', { password: pw, type, ...extra }).then(() => setTimeout(refresh, 3500)).catch(e => alert(e.message));
 
   // 슬라이더를 움직이는 동안은 마지막 값만 0.3초 뒤에 저장
   function changeVol(v) {
@@ -97,6 +129,7 @@ export default function Home() {
               </div>
             ) : (
               <>
+                <Progress s={s} offset={offset.current} onSeek={t => cmd('seek', { t })} />
                 <div className="ctrl" style={{ marginTop: 14 }}>
                   <button className="btn line" onClick={() => cmd('prev')}>⏮ 이전곡</button>
                   <button className="btn red" onClick={() => cmd('toggle')}>⏯ 재생/일시정지</button>
@@ -107,7 +140,7 @@ export default function Home() {
                   <input type="range" min="0" max="100" value={vol} onChange={e => changeVol(Number(e.target.value))} />
                   <b>{vol}</b>
                 </label>
-                <div className="note">버튼과 음량은 사무실 플레이어에 3초 안에 반영돼요.</div>
+                <div className="note">시간 이동·버튼·음량은 사무실 플레이어에 3초 안에 반영돼요.</div>
               </>
             )}
           </details>

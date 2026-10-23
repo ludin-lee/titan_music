@@ -40,7 +40,11 @@ export default function Player() {
       playerVars: { autoplay: 1 },
       events: {
         onReady: e => e.target.setVolume(vol.current),
-        onStateChange: e => { if (e.data === 0) go('next'); setPaused(e.data === 2); }, // 0 = 끝남, 2 = 일시정지
+        onStateChange: e => { // 0 = 끝남, 1 = 재생, 2 = 일시정지
+          if (e.data === 0) go('next');
+          if (e.data === 1 || e.data === 2) report();
+          setPaused(e.data === 2);
+        },
         onError: () => setTimeout(() => go('next'), 1000), // 임베드 금지/삭제된 영상은 건너뜀
       },
     });
@@ -51,6 +55,14 @@ export default function Player() {
     setCur(now);
     if (now) play(now.id);
   }
+
+  // 관리자 화면 진행률용: 지금 재생 위치를 서버에 알림
+  function report() {
+    const p = yt.current;
+    if (!p?.getCurrentTime || !cur.current) return;
+    post('/api/progress', { id: cur.current.id, t: p.getCurrentTime(), d: p.getDuration(), playing: p.getPlayerState() === 1 }).catch(() => {});
+  }
+  const seek = t => { yt.current?.seekTo?.(t, true); setTimeout(report, 800); };
 
   const toggle = () => { const p = yt.current; if (p) p.getPlayerState() === 1 ? p.pauseVideo() : p.playVideo(); };
 
@@ -73,10 +85,12 @@ export default function Player() {
       if ((x.volume ?? 100) !== vol.current) { vol.current = x.volume ?? 100; yt.current?.setVolume?.(vol.current); } // 관리자 음량
       if (x.cmd.seq !== cmdSeq.current) { // 관리자 원격 조작
         cmdSeq.current = x.cmd.seq;
-        ({ prev: () => go('prev'), next: () => go('next'), toggle })[x.cmd.type]?.();
+        ({ prev: () => go('prev'), next: () => go('next'), toggle, seek: () => seek(x.cmd.t) })[x.cmd.type]?.();
       } else if (!cur.current && x.queue.length) go('next'); // 멈춰 있다가 곡이 생김
     }, 3000);
-    return () => clearInterval(t);
+    // ponytail: 위치는 15초마다만 보내고 그 사이는 관리자 화면이 시간을 이어 계산 (Redis 사용량 절약)
+    const r = setInterval(report, 15000);
+    return () => { clearInterval(t); clearInterval(r); };
   }, [started]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const view = s && { ...s, now: current };
