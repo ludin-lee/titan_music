@@ -16,6 +16,8 @@ body { background: var(--bg); color: var(--ink); font-family: var(--t-font, 'Pre
 .topbar h1 { font-size: 19px; margin: 0; font-weight: 700; letter-spacing: -.02em; white-space: nowrap; }
 .topbar .sub { color: var(--ink2); font-size: 13px; }
 .topbar .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
+.topbar .floor { margin-left: auto; display: flex; gap: 4px; }
+.topbar .right + .floor { margin-left: 0; }
 
 /* 본문: 왼쪽 + 오른쪽 신청곡 */
 .wrap { max-width: 1240px; margin: 0 auto; padding: 22px 20px 56px; display: grid; grid-template-columns: minmax(0,1fr) 400px; gap: 20px; align-items: start; }
