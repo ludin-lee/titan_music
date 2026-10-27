@@ -189,6 +189,8 @@ async function route(req, p) {
     state.volume = v;
     return done(pub());
   }
+  // 지금 나오는 곡은 끝까지 재생되고, 그 다음부터 새 신청곡을 기다린다
+  if (p === 'admin/clear') { state.queue = []; state.replayPos = 0; return done(pub()); }
   if (p === 'admin/remove') { state.queue = state.queue.filter(q => q.id !== b.id); return done(pub()); }
   return json({ error: 'not found' }, 404);
 }

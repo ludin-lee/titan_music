@@ -140,6 +140,7 @@ export default function Home() {
                   <input type="range" min="0" max="100" value={vol} onChange={e => changeVol(Number(e.target.value))} />
                   <b>{vol}</b>
                 </label>
+                <button className="btn sm line" style={{ marginTop: 14 }} onClick={() => confirm('신청곡을 전부 삭제할까요?') && post('/api/admin/clear', { password: pw }).then(setS).catch(e => alert(e.message))}>신청곡 전체삭제</button>
                 <div className="note">시간 이동·버튼·음량은 사무실 플레이어에 3초 안에 반영돼요.</div>
               </>
             )}
