@@ -7,7 +7,7 @@ export const thumb = id => `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
 // 층마다 따로: 신청곡·플레이어가 층별로 돈다. 주소 ?room=3 > 마지막으로 고른 층 > 첫 층
 const FLOORS = ['3', '4'];
 const saved = () => { try { return localStorage.getItem('room'); } catch { return null; } };
-const room = () => [new URLSearchParams(location.search).get('room'), saved()].find(f => FLOORS.includes(f)) || FLOORS[0];
+export const room = () => [new URLSearchParams(location.search).get('room'), saved()].find(f => FLOORS.includes(f)) || FLOORS[0];
 
 // 층을 바꾸면 그 층 주소로 새로 연다 (플레이어는 지금 틀던 곡이 멈추므로 확인)
 function FloorPick() {

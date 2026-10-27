@@ -5,7 +5,8 @@ import path from 'path';
 export const dynamic = 'force-dynamic';
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
-const PLAYER_PASSWORD = process.env.PLAYER_PASSWORD || ADMIN_PASSWORD; // 플레이어 시작용, 없으면 관리자 비밀번호
+// 플레이어 시작용, 층마다 따로 (PLAYER_PASSWORD_3, PLAYER_PASSWORD_4). 없으면 공용 PLAYER_PASSWORD → 관리자 비밀번호
+const playerPassword = room => process.env[`PLAYER_PASSWORD_${room}`] || process.env.PLAYER_PASSWORD || ADMIN_PASSWORD;
 // Vercel 마켓플레이스에서 Supabase를 연결하면 들어오는 이름. 서버에서만 쓰는 service role 키라 RLS를 우회한다
 const DB_URL = process.env.SUPABASE_URL;
 const DB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -144,7 +145,7 @@ async function route(req, p, room) {
   // 비밀번호를 아는 사람이 force로 "기존 플레이어 끊고 여기서 틀기"를 고르면 넘겨준다 (중복 로그인 처리처럼)
   if (p === 'claim') {
     if (!/^[\w-]{8,64}$/.test(b.pid || '')) return json({ error: 'bad pid' }, 400);
-    if (b.password !== PLAYER_PASSWORD) return json({ error: '플레이어 비밀번호가 틀렸어요' }, 403);
+    if (b.password !== playerPassword(room)) return json({ error: '플레이어 비밀번호가 틀렸어요' }, 403);
     if (!b.force && b.pid !== state.playerId && ownerAlive(state, progress)) {
       return json({ error: '이미 다른 곳에서 플레이어가 켜져 있어요', busy: true }, 409);
     }
