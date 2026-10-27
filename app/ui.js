@@ -9,18 +9,39 @@ export const FLOORS = ['3', '4'];
 const saved = () => { try { return localStorage.getItem('room'); } catch { return null; } };
 export const room = () => [new URLSearchParams(location.search).get('room'), saved()].find(f => FLOORS.includes(f)) || FLOORS[0];
 
-// 층을 바꾸면 그 층 주소로 새로 연다 (플레이어는 지금 틀던 곡이 멈추므로 확인)
+// 층을 바꾸면 그 층 주소로 새로 연다. 플레이어는 다른 층 노래를 실수로 끊지 않게 그 층 비밀번호가 맞아야만 이동
 function FloorPick() {
   const [cur, setCur] = useState(null);
+  const [ask, setAsk] = useState(null); // 비밀번호를 묻는 중인 층
+  const [pw, setPw] = useState('');
   useEffect(() => setCur(room()), []);
-  const pick = f => {
-    if (f === cur || (location.pathname.startsWith('/player') && !confirm(`${f}층 플레이어로 바꿀까요? 지금 틀던 곡은 멈추고, ${f}층 비밀번호를 입력해야 시작돼요`))) return;
+  const go = f => {
     try { localStorage.setItem('room', f); } catch {}
     location.search = '?room=' + f;
   };
+  const pick = f => {
+    if (f === cur) return;
+    if (!location.pathname.startsWith('/player')) return go(f);
+    setPw('');
+    setAsk(f);
+  };
+  const submit = async e => {
+    e.preventDefault();
+    try { await post('/api/player/check', { floor: ask, password: pw }); }
+    catch (err) { return alert(err.message); } // 틀리면 지금 층에 그대로
+    try { localStorage.setItem('playerPw:' + ask, pw); } catch {} // 이동한 층 시작 화면에 채워두기
+    go(ask);
+  };
   return (
     <div className="floor">
-      {FLOORS.map(f => <button key={f} className={`btn sm ${f === cur ? 'red' : 'line'}`} onClick={() => pick(f)}>{f}층</button>)}
+      {FLOORS.map(f => <button key={f} className={`btn sm ${f === cur ? 'red' : f === ask ? 'line on' : 'line'}`} onClick={() => pick(f)}>{f}층</button>)}
+      {ask && (
+        <form key={ask} className="pop" onSubmit={submit} onKeyDown={e => e.key === 'Escape' && setAsk(null)}>
+          <b>{ask}층 플레이어 비밀번호</b>
+          <input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="비밀번호" aria-label={`${ask}층 플레이어 비밀번호`} autoFocus required />
+          <div><button type="button" className="btn sm line" onClick={() => setAsk(null)}>취소</button><button className="btn sm red">이동</button></div>
+        </form>
+      )}
     </div>
   );
 }

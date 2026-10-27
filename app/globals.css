@@ -18,6 +18,15 @@ body { background: var(--bg); color: var(--ink); font-family: var(--t-font, 'Pre
 .topbar .right { margin-left: auto; display: flex; gap: 8px; align-items: center; }
 .topbar .floor { margin-left: auto; display: flex; gap: 4px; }
 .topbar .right + .floor { margin-left: 0; }
+.topbar .floor { position: relative; }
+.topbar .floor .on { border-color: var(--red); color: var(--red); }
+/* 층 바꾸기 비밀번호 말풍선: 버튼 아래로 뽀잉 */
+.pop { position: absolute; top: calc(100% + 12px); right: 0; width: 240px; padding: 14px; background: #fff; border-radius: 14px; box-shadow: 0 8px 28px rgba(0,0,0,.18); display: grid; gap: 10px; transform-origin: calc(100% - 22px) -10px; animation: pop .38s cubic-bezier(.34,1.56,.64,1); }
+.pop::before { content: ''; position: absolute; top: -7px; right: 18px; width: 14px; height: 14px; background: #fff; transform: rotate(45deg); border-radius: 3px 0 0 0; }
+.pop b { font-size: 14px; }
+.pop div { display: flex; gap: 6px; justify-content: flex-end; }
+@keyframes pop { from { opacity: 0; transform: scale(.4); } to { opacity: 1; transform: scale(1); } }
+@media (prefers-reduced-motion: reduce) { .pop { animation: none; } }
 
 /* 본문: 왼쪽 + 오른쪽 신청곡 */
 .wrap { max-width: 1240px; margin: 0 auto; padding: 22px 20px 56px; display: grid; grid-template-columns: minmax(0,1fr) 400px; gap: 20px; align-items: start; }
