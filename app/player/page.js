@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { NowCard, RequestList, Topbar, getState, post, room } from '../ui';
+import { FLOORS, NowCard, RequestList, Topbar, getState, post, room } from '../ui';
 
 export default function Player() {
   const [s, setS] = useState(null);
@@ -108,7 +108,8 @@ export default function Player() {
       return setNotice(err.message);
     }
     setBusy(false);
-    try { localStorage.setItem('playerPw:' + room(), pw); } catch {}
+    // 비밀번호는 지금 층 것만 기억: 다른 층으로 옮기면 그 층 비밀번호를 꼭 다시 입력하게 (실수로 다른 층 노래를 끊지 않게)
+    try { FLOORS.forEach(f => localStorage.removeItem('playerPw:' + f)); localStorage.removeItem('playerPw'); localStorage.setItem('playerPw:' + room(), pw); } catch {}
     setNotice('');
     kickedRef.current = false;
     setKicked(false);
