@@ -16,7 +16,7 @@ alter table music enable row level security; -- 공개 키(anon)로는 못 읽�
 grant select, insert, update on music to service_role;
 */
 
-const EMPTY = { now: null, queue: [], history: [], replayPos: 0, cmd: { seq: 0 }, volume: 100 };
+const EMPTY = { now: null, queue: [], history: [], replayPos: 0, cmd: { seq: 0 }, volume: 100, votes: {} };
 
 async function db(method, query, body) {
   const r = await fetch(`${DB_URL}/rest/v1/music${query}`, {
@@ -127,7 +127,10 @@ function ownerAlive(state, progress, now = Date.now()) {
 
 const json = (obj, status = 200) => Response.json(obj, { status, headers: { 'Cache-Control': 'no-store' } });
 // serverNow: 화면이 서버 시계 기준으로 진행률을 계산하도록
-const publicState = (s, progress) => ({ playerId: s.playerId, now: s.now, queue: s.queue, replayPos: s.replayPos, cmd: s.cmd, volume: s.volume, progress, serverNow: Date.now() });
+// votes: 곡 id별 좋아요/싫어요 수. 신청곡을 지워도 남는다. top: 좋아요 많은 순 5곡 (같으면 싫어요 적은 순)
+const top5 = votes => Object.entries(votes).map(([id, v]) => ({ id, ...v })).filter(v => v.up > 0)
+  .sort((a, b) => b.up - a.up || a.down - b.down).slice(0, 5);
+const publicState = (s, progress) => ({ playerId: s.playerId, now: s.now, queue: s.queue, replayPos: s.replayPos, cmd: s.cmd, volume: s.volume, votes: s.votes, top: top5(s.votes), progress, serverNow: Date.now() });
 
 async function route(req, p, room) {
   if (req.method === 'GET' && p === 'search') {
@@ -182,6 +185,18 @@ async function route(req, p, room) {
     if (!v) return json({ error: '영상을 찾을 수 없어요 (비공개/삭제됨?)' }, 400);
     if (state.queue.some(q => q.id === id && !q.played)) return json({ error: '이미 예약된 곡이에요' }, 400);
     state.queue.push({ ...v, by });
+    return done(pub());
+  }
+  // 좋아요(1)/싫어요(-1)/취소(0). 누가 눌렀는지는 각자 브라우저(localStorage)가 기억하고 이전 값(from)을 같이 보낸다
+  // ponytail: from을 그대로 믿으므로 저장소를 지우면 또 누를 수 있음. 조작이 문제되면 사람별 기록을 서버에 둘 것
+  if (p === 'vote') {
+    const ok = x => [-1, 0, 1].includes(x);
+    if (!ok(b.from) || !ok(b.to) || b.from === b.to) return json({ error: 'bad vote' }, 400);
+    const song = state.queue.find(q => q.id === b.id) || (state.now?.id === b.id && state.now);
+    if (!song) return json({ error: '신청곡 목록에 없는 곡이에요' }, 400);
+    const v = state.votes[b.id] ??= { title: song.title, by: song.by, up: 0, down: 0 };
+    if (b.from) v[b.from > 0 ? 'up' : 'down'] = Math.max(0, v[b.from > 0 ? 'up' : 'down'] - 1);
+    if (b.to) v[b.to > 0 ? 'up' : 'down']++;
     return done(pub());
   }
   // ponytail: 플레이어 페이지용이라 비밀번호 없음. 장난치는 사람 생기면 플레이어 전용 토큰 추가
