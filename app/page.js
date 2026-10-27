@@ -148,9 +148,10 @@ export default function Home() {
         </main>
 
         <aside className="card">
-          <RequestList s={s} extra={admin ? x => (
+          <RequestList s={s} extra={admin ? (x, i) => (<>
+            <button className="btn sm line" onClick={() => post('/api/admin/play', { password: pw, id: x.id, index: i }).then(setS).catch(e => alert(e.message))}>▶ 재생</button>
             <button className="btn sm line" onClick={() => post('/api/admin/remove', { password: pw, id: x.id }).then(setS)}>삭제</button>
-          ) : undefined} />
+          </>) : undefined} />
         </aside>
       </div>
     </>
