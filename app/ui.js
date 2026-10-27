@@ -5,7 +5,7 @@ import { useEffect, useState } from 'react';
 export const thumb = id => `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
 
 // 층마다 따로: 신청곡·플레이어가 층별로 돈다. 주소 ?room=3 > 마지막으로 고른 층 > 첫 층
-const FLOORS = ['3', '4'];
+export const FLOORS = ['3', '4'];
 const saved = () => { try { return localStorage.getItem('room'); } catch { return null; } };
 export const room = () => [new URLSearchParams(location.search).get('room'), saved()].find(f => FLOORS.includes(f)) || FLOORS[0];
 
@@ -14,7 +14,7 @@ function FloorPick() {
   const [cur, setCur] = useState(null);
   useEffect(() => setCur(room()), []);
   const pick = f => {
-    if (f === cur || (location.pathname.startsWith('/player') && !confirm(`${f}층 플레이어로 바꿀까요? 지금 틀던 곡은 멈춰요`))) return;
+    if (f === cur || (location.pathname.startsWith('/player') && !confirm(`${f}층 플레이어로 바꿀까요? 지금 틀던 곡은 멈추고, ${f}층 비밀번호를 입력해야 시작돼요`))) return;
     try { localStorage.setItem('room', f); } catch {}
     location.search = '?room=' + f;
   };
