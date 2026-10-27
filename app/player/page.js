@@ -134,7 +134,7 @@ export default function Player() {
       } else if (!cur.current && x.queue.length) go('next'); // 멈춰 있다가 곡이 생김
       else if (cur.current && yt.current?.getPlayerState?.() === 0) go('next'); // 곡이 끝났는데 다음 곡으로 못 넘어간 경우
     }, 3000);
-    // ponytail: 위치는 15초마다만 보내고 그 사이는 관리자 화면이 시간을 이어 계산 (Redis 사용량 절약)
+    // ponytail: 위치는 15초마다만 보내고 그 사이는 관리자 화면이 시간을 이어 계산 (DB 요청 절약)
     const r = setInterval(report, 15000);
     return () => { clearInterval(t); clearInterval(r); };
   }, [started]); // eslint-disable-line react-hooks/exhaustive-deps

@@ -6,38 +6,50 @@ export const dynamic = 'force-dynamic';
 
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 const PLAYER_PASSWORD = process.env.PLAYER_PASSWORD || ADMIN_PASSWORD; // 플레이어 시작용, 없으면 관리자 비밀번호
-const DATA = path.join(process.cwd(), 'data.json');
-// Vercel 마켓플레이스에서 Upstash를 연결하면 둘 중 한 이름으로 들어온다
-const REDIS_URL = process.env.KV_REST_API_URL || process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.KV_REST_API_TOKEN || process.env.UPSTASH_REDIS_REST_TOKEN;
+// Vercel 마켓플레이스에서 Supabase를 연결하면 들어오는 이름. 서버에서만 쓰는 service role 키라 RLS를 우회한다
+const DB_URL = process.env.SUPABASE_URL;
+const DB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
+/* Supabase SQL Editor에서 한 번 실행:
+create table music (room text primary key, state jsonb not null default '{}', progress jsonb);
+alter table music enable row level security; -- 공개 키(anon)로는 못 읽게. 정책 없음 = service role만
+grant select, insert, update on music to service_role;
+*/
 
 const EMPTY = { now: null, queue: [], history: [], replayPos: 0, cmd: { seq: 0 }, volume: 100 };
 
-async function redis(...cmd) {
-  const r = await fetch(REDIS_URL, { method: 'POST', headers: { Authorization: `Bearer ${REDIS_TOKEN}` }, body: JSON.stringify(cmd), cache: 'no-store' });
-  const j = await r.json();
-  if (j.error) throw new Error(j.error);
-  return j.result;
+async function db(method, query, body) {
+  const r = await fetch(`${DB_URL}/rest/v1/music${query}`, {
+    method,
+    headers: { apikey: DB_KEY, Authorization: `Bearer ${DB_KEY}`, 'Content-Type': 'application/json', Prefer: 'resolution=merge-duplicates,return=minimal' },
+    body: body && JSON.stringify(body),
+    cache: 'no-store',
+  });
+  if (!r.ok) throw new Error(`DB 오류 (${r.status}): ${(await r.text()).slice(0, 200)}`);
+  return method === 'GET' ? r.json() : null;
 }
+// 행이 없으면 만들고 있으면 보낸 칸만 덮어쓴다 (state와 progress가 서로를 안 덮게)
+const upsert = (room, cols) => db('POST', '?on_conflict=room', { room: room || 'main', ...cols });
 
-// ponytail: 상태 전체를 JSON 한 덩어리로 읽고 씀. 동시에 두 명이 바꾸면 한쪽이 덮일 수 있음 — 사무실 규모에선 드묾, 문제되면 항목별 키로 쪼갤 것
+// ponytail: 상태 전체를 JSON 한 덩어리로 읽고 씀. 동시에 두 명이 바꾸면 한쪽이 덮일 수 있음 — 사무실 규모에선 드묾, 문제되면 칸을 쪼갤 것
 // 재생 위치(progress)는 플레이어가 자주 쓰므로 state와 덮어쓰기 경쟁이 없게 따로 둔다
-let localProgress = null; // 로컬 실행용
-async function load() {
-  if (REDIS_URL) {
-    const [state, progress] = await redis('MGET', 'state', 'progress');
-    return [{ ...EMPTY, ...JSON.parse(state || '{}') }, JSON.parse(progress || 'null')];
+// 방(층)마다 행/파일을 따로. 방 이름 없으면 기본 방
+const localProgress = {}; // 로컬 실행용, 방별
+const dataFile = room => path.join(process.cwd(), room ? `data-${room}.json` : 'data.json');
+async function load(room) {
+  if (DB_URL) {
+    const [row] = await db('GET', `?room=eq.${room || 'main'}&select=state,progress`);
+    return [{ ...EMPTY, ...row?.state }, row?.progress ?? null];
   }
-  if (process.env.VERCEL) throw new Error('저장소가 연결되지 않았어요. Vercel 프로젝트 Storage에서 Upstash Redis를 연결해주세요');
-  try { return [{ ...EMPTY, ...JSON.parse(fs.readFileSync(DATA, 'utf8')) }, localProgress]; } catch { return [{ ...EMPTY }, localProgress]; }
+  if (process.env.VERCEL) throw new Error('저장소가 연결되지 않았어요. Vercel 프로젝트 Storage에서 Supabase를 연결해주세요');
+  try { return [{ ...EMPTY, ...JSON.parse(fs.readFileSync(dataFile(room), 'utf8')) }, localProgress[room] ?? null]; } catch { return [{ ...EMPTY }, localProgress[room] ?? null]; }
 }
-async function saveProgress(progress) {
-  if (REDIS_URL) return redis('SET', 'progress', JSON.stringify(progress));
-  localProgress = progress;
+async function saveProgress(progress, room) {
+  if (DB_URL) return upsert(room, { progress });
+  localProgress[room] = progress;
 }
-async function save(state) {
-  if (REDIS_URL) return redis('SET', 'state', JSON.stringify(state));
-  fs.writeFileSync(DATA, JSON.stringify(state, null, 2));
+async function save(state, room) {
+  if (DB_URL) return upsert(room, { state });
+  fs.writeFileSync(dataFile(room), JSON.stringify(state, null, 2));
 }
 
 function videoId(input) {
@@ -116,17 +128,17 @@ const json = (obj, status = 200) => Response.json(obj, { status, headers: { 'Cac
 // serverNow: 화면이 서버 시계 기준으로 진행률을 계산하도록
 const publicState = (s, progress) => ({ playerId: s.playerId, now: s.now, queue: s.queue, replayPos: s.replayPos, cmd: s.cmd, volume: s.volume, progress, serverNow: Date.now() });
 
-async function route(req, p) {
+async function route(req, p, room) {
   if (req.method === 'GET' && p === 'search') {
     const q = (new URL(req.url).searchParams.get('q') || '').trim().slice(0, 100);
     return json(q ? await search(q) : []);
   }
-  const [state, progress] = await load();
+  const [state, progress] = await load(room);
   const pub = () => publicState(state, progress);
   if (req.method === 'GET' && p === 'state') return json(pub());
   if (req.method !== 'POST') return json({ error: 'not found' }, 404);
   const b = await req.json().catch(() => ({}));
-  const done = async out => { await save(state); return json(out); };
+  const done = async out => { await save(state, room); return json(out); };
 
   // 플레이어는 한 곳만: 먼저 켠 플레이어(pid)가 주인. 주인이 살아 있으면 나중에 켠 쪽은 거절하되,
   // 비밀번호를 아는 사람이 force로 "기존 플레이어 끊고 여기서 틀기"를 고르면 넘겨준다 (중복 로그인 처리처럼)
@@ -148,7 +160,7 @@ async function route(req, p) {
   if (p === 'progress') {
     const t = Number(b.t), d = Number(b.d);
     if (!/^[\w-]{11}$/.test(b.id || '') || !(t >= 0) || !(d >= 0)) return json({ error: 'bad progress' }, 400);
-    await saveProgress({ id: b.id, t, d, playing: !!b.playing, at: Date.now() });
+    await saveProgress({ id: b.id, t, d, playing: !!b.playing, at: Date.now() }, room);
     return json({ ok: true });
   }
 
@@ -208,7 +220,9 @@ async function route(req, p) {
 
 async function handle(req, { params }) {
   try {
-    return await route(req, (await params).path.join('/'));
+    const room = req.headers.get('x-room') || '';
+    if (!/^[\w-]{0,20}$/.test(room)) return json({ error: '방 이름이 잘못됐어요' }, 400);
+    return await route(req, (await params).path.join('/'), room);
   } catch (err) {
     console.error(err);
     return json({ error: err.message }, 500); // 에러를 숨기지 않고 화면에 보여준다

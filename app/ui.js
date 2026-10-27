@@ -4,8 +4,10 @@ import { useEffect } from 'react';
 
 export const thumb = id => `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
 
+// 층마다 따로 쓰기: 주소에 ?room=down 을 붙이면 신청곡·플레이어가 따로 돈다 (없으면 기존 방)
+const room = () => new URLSearchParams(location.search).get('room') || '';
 async function call(url, init) {
-  const r = await fetch(url, { cache: 'no-store', ...init });
+  const r = await fetch(url, { cache: 'no-store', ...init, headers: { 'x-room': room() } });
   const j = await r.json().catch(() => ({ error: `서버 응답 오류 (${r.status})` }));
   if (!r.ok) throw new Error(j.error);
   return j;
