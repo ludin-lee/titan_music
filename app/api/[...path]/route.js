@@ -143,6 +143,12 @@ async function route(req, p, room) {
 
   // 플레이어는 한 곳만: 먼저 켠 플레이어(pid)가 주인. 주인이 살아 있으면 나중에 켠 쪽은 거절하되,
   // 비밀번호를 아는 사람이 force로 "기존 플레이어 끊고 여기서 틀기"를 고르면 넘겨준다 (중복 로그인 처리처럼)
+  // 플레이어에서 다른 층으로 옮기기 전에 그 층 비밀번호 확인 (플레이어를 가져오진 않음)
+  if (p === 'player/check') {
+    if (!/^[\w-]{1,20}$/.test(b.floor || '')) return json({ error: '층이 잘못됐어요' }, 400);
+    if (b.password !== playerPassword(b.floor)) return json({ error: `${b.floor}층 비밀번호가 틀렸어요` }, 403);
+    return json({ ok: true });
+  }
   if (p === 'claim') {
     if (!/^[\w-]{8,64}$/.test(b.pid || '')) return json({ error: 'bad pid' }, 400);
     if (b.password !== playerPassword(room)) return json({ error: '플레이어 비밀번호가 틀렸어요' }, 403);
