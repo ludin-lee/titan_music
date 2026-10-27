@@ -189,6 +189,17 @@ async function route(req, p) {
     state.volume = v;
     return done(pub());
   }
+  // 신청곡 목록에서 고른 곡을 바로 재생. 그 앞은 재생됨, 뒤는 대기로 돌려서 다음 곡이 바로 뒤 곡이 되게
+  if (p === 'admin/play') {
+    const i = Number(b.index);
+    if (state.queue[i]?.id !== b.id) return json({ error: '목록이 바뀌었어요. 새로고침 후 다시 골라주세요' }, 400);
+    if (state.now) state.history = [...state.history, state.now].slice(-50);
+    state.queue.forEach((q, j) => { q.played = j <= i; });
+    state.now = { ...state.queue[i] };
+    state.replayPos = (i + 1) % state.queue.length;
+    state.cmd = { seq: state.cmd.seq + 1, type: 'play' };
+    return done(pub());
+  }
   // 지금 나오는 곡은 끝까지 재생되고, 그 다음부터 새 신청곡을 기다린다
   if (p === 'admin/clear') { state.queue = []; state.replayPos = 0; return done(pub()); }
   if (p === 'admin/remove') { state.queue = state.queue.filter(q => q.id !== b.id); return done(pub()); }

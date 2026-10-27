@@ -130,7 +130,7 @@ export default function Player() {
       if ((x.volume ?? 100) !== vol.current) { vol.current = x.volume ?? 100; yt.current?.setVolume?.(vol.current); } // 관리자 음량
       if (x.cmd.seq !== cmdSeq.current) { // 관리자 원격 조작
         cmdSeq.current = x.cmd.seq;
-        ({ prev: () => go('prev'), next: () => go('next'), toggle, seek: () => seek(x.cmd.t) })[x.cmd.type]?.();
+        ({ prev: () => go('prev'), next: () => go('next'), toggle, seek: () => seek(x.cmd.t), play: () => { setCur(x.now); if (x.now) play(x.now.id); } })[x.cmd.type]?.();
       } else if (!cur.current && x.queue.length) go('next'); // 멈춰 있다가 곡이 생김
       else if (cur.current && yt.current?.getPlayerState?.() === 0) go('next'); // 곡이 끝났는데 다음 곡으로 못 넘어간 경우
     }, 3000);

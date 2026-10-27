@@ -75,7 +75,7 @@ export function RequestList({ s, extra }) {
           <Row key={`${x.id}-${i}`} v={x} sub={`${x.by} 님`}
             chip={i === playingIdx ? '재생 중' : i === nextIdx ? '다음' : x.played ? '재생됨' : '대기'} red={i === playingIdx}
             cls={i === playingIdx ? 'playing' : x.played ? 'done' : ''}>
-            {extra?.(x)}
+            {extra?.(x, i)}
           </Row>
         )) : <li className="empty-msg">아직 신청곡이 없어요<br />신청하면 다음 곡으로 나와요</li>}
       </ul>
