@@ -32,16 +32,16 @@ function FloorPick() {
     try { localStorage.setItem('playerPw:' + ask, pw); } catch {} // 이동한 층 시작 화면에 채워두기
     go(ask);
   };
-  if (ask) return (
-    <form className="floor" onSubmit={submit}>
-      <input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder={`${ask}층 비밀번호`} aria-label={`${ask}층 플레이어 비밀번호`} autoFocus required />
-      <button className="btn sm red">이동</button>
-      <button type="button" className="btn sm line" onClick={() => setAsk(null)}>취소</button>
-    </form>
-  );
   return (
     <div className="floor">
-      {FLOORS.map(f => <button key={f} className={`btn sm ${f === cur ? 'red' : 'line'}`} onClick={() => pick(f)}>{f}층</button>)}
+      {FLOORS.map(f => <button key={f} className={`btn sm ${f === cur ? 'red' : f === ask ? 'line on' : 'line'}`} onClick={() => pick(f)}>{f}층</button>)}
+      {ask && (
+        <form key={ask} className="pop" onSubmit={submit} onKeyDown={e => e.key === 'Escape' && setAsk(null)}>
+          <b>{ask}층 플레이어 비밀번호</b>
+          <input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="비밀번호" aria-label={`${ask}층 플레이어 비밀번호`} autoFocus required />
+          <div><button type="button" className="btn sm line" onClick={() => setAsk(null)}>취소</button><button className="btn sm red">이동</button></div>
+        </form>
+      )}
     </div>
   );
 }
