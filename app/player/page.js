@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { NowCard, RequestList, Topbar, getState, post } from '../ui';
+import { NowCard, RequestList, Topbar, getState, post, room } from '../ui';
 
 export default function Player() {
   const [s, setS] = useState(null);
@@ -35,7 +35,7 @@ export default function Player() {
   // 시작 전에도 목록은 보이게
   useEffect(() => { getState().then(x => { setS(x); setCur(x.now); }).catch(() => {}); }, []);
 
-  useEffect(() => { try { setPw(localStorage.getItem('playerPw') || ''); } catch {} }, []);
+  useEffect(() => { try { setPw(localStorage.getItem('playerPw:' + room()) || ''); } catch {} }, []);
 
   useEffect(() => { document.title = current ? `🎵 ${current.title}` : '사무실 플레이어'; }, [current]);
 
@@ -108,7 +108,7 @@ export default function Player() {
       return setNotice(err.message);
     }
     setBusy(false);
-    try { localStorage.setItem('playerPw', pw); } catch {}
+    try { localStorage.setItem('playerPw:' + room(), pw); } catch {}
     setNotice('');
     kickedRef.current = false;
     setKicked(false);
