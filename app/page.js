@@ -1,6 +1,6 @@
 'use client';
 import { useEffect, useRef, useState } from 'react';
-import { NowCard, RequestList, Row, Topbar, getState, post, searchYT, usePoll } from './ui';
+import { NowCard, RequestList, Row, Top5, Topbar, getState, post, searchYT, usePoll } from './ui';
 
 const fmt = sec => { sec = Math.max(0, Math.floor(sec)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
 
@@ -97,6 +97,7 @@ export default function Home() {
         <main>
           {loadErr && <div className="note err">⚠️ {loadErr}</div>}
           <NowCard now={s?.now} />
+          <Top5 s={s} />
 
           <section className="card">
             <h2>신청하기 <small>노래 제목으로 검색하거나 유튜브 링크를 붙여넣으세요</small></h2>
@@ -148,7 +149,7 @@ export default function Home() {
         </main>
 
         <aside className="card">
-          <RequestList s={s} extra={admin ? (x, i) => (<>
+          <RequestList s={s} onState={setS} extra={admin ? (x, i) => (<>
             <button className="btn sm line" onClick={() => post('/api/admin/play', { password: pw, id: x.id, index: i }).then(setS).catch(e => alert(e.message))}>▶ 재생</button>
             <button className="btn sm line" onClick={() => post('/api/admin/remove', { password: pw, id: x.id }).then(setS)}>삭제</button>
           </>) : undefined} />

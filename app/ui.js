@@ -75,9 +75,10 @@ export function Topbar({ title, sub, children }) {
   );
 }
 
-export function Row({ v, sub, chip, red, cls = '', children }) {
+export function Row({ v, sub, chip, red, cls = '', pop, children }) {
   return (
-    <li className={`row ${cls}`}>
+    <li className={`row ${cls}`} tabIndex={pop ? 0 : undefined}>
+      {pop}
       <img src={thumb(v.id)} alt="" loading="lazy" />
       <div className="t"><b>{v.title}</b>{sub && <small>{sub}</small>}</div>
       {chip && <span className={`chip ${red ? 'red' : ''}`}>{chip}</span>}
@@ -101,7 +102,40 @@ export function NowCard({ now, paused }) {
 }
 
 // 받은 신청곡 전체: 접수 순서대로, 재생 중 / 대기 / 재생됨. 새 신청곡이 없으면 처음부터 다시 재생하므로 그 차례를 '다음'으로
-export function RequestList({ s, extra }) {
+// 좋아요/싫어요: 내가 누른 값은 이 브라우저에만 (층·곡별). 같은 걸 다시 누르면 취소
+const voteKey = id => `vote:${room()}:${id}`;
+const myVote = id => { try { return Number(localStorage.getItem(voteKey(id))) || 0; } catch { return 0; } };
+function VotePop({ id, votes, onState }) {
+  const [mine, setMine] = useState(() => myVote(id));
+  const v = votes?.[id] || { up: 0, down: 0 };
+  const send = async to => {
+    if (mine === to) to = 0;
+    try { onState(await post('/api/vote', { id, from: mine, to })); }
+    catch (err) { return alert(err.message); }
+    try { localStorage.setItem(voteKey(id), to); } catch {}
+    setMine(to);
+  };
+  return (
+    <span className="vpop" onClick={e => e.stopPropagation()}>
+      <button type="button" className={mine === 1 ? 'on' : ''} onClick={() => send(1)} aria-label="좋아요" aria-pressed={mine === 1}>👍 {v.up}</button>
+      <button type="button" className={mine === -1 ? 'on' : ''} onClick={() => send(-1)} aria-label="싫어요" aria-pressed={mine === -1}>👎 {v.down}</button>
+    </span>
+  );
+}
+
+export function Top5({ s }) {
+  if (!s?.top?.length) return null;
+  return (
+    <section className="card">
+      <h2>인기 TOP 5 <small>좋아요 많은 순</small></h2>
+      <ol className="list top">
+        {s.top.map((x, i) => <Row key={x.id} v={x} sub={`${x.by} 님 신청`} chip={`👍 ${x.up}`} red={i === 0}><b className="rank">{i + 1}</b></Row>)}
+      </ol>
+    </section>
+  );
+}
+
+export function RequestList({ s, extra, onState }) {
   const q = s?.queue || [];
   const playingIdx = s?.now ? (s.now.replay
     ? (s.replayPos - 1 + q.length) % (q.length || 1)
@@ -116,7 +150,8 @@ export function RequestList({ s, extra }) {
         {q.length ? q.map((x, i) => (
           <Row key={`${x.id}-${i}`} v={x} sub={`${x.by} 님`}
             chip={i === playingIdx ? '재생 중' : i === nextIdx ? '다음' : x.played ? '재생됨' : '대기'} red={i === playingIdx}
-            cls={i === playingIdx ? 'playing' : x.played ? 'done' : ''}>
+            cls={i === playingIdx ? 'playing' : x.played ? 'done' : ''}
+            pop={onState && <VotePop id={x.id} votes={s.votes} onState={onState} />}>
             {extra?.(x, i)}
           </Row>
         )) : <li className="empty-msg">아직 신청곡이 없어요<br />신청하면 다음 곡으로 나와요</li>}
