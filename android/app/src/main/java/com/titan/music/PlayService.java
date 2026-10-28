@@ -87,7 +87,7 @@ public class PlayService extends Service {
                 .setSmallIcon(android.R.drawable.ic_media_play)
                 .setContentTitle(title.isEmpty() ? "타이탄 뮤직플레이어" : title)
                 .setContentText("타이탄 뮤직플레이어")
-                .setContentIntent(PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE))
+                .setContentIntent(PendingIntent.getActivity(this, 0, getPackageManager().getLaunchIntentForPackage(getPackageName()), PendingIntent.FLAG_IMMUTABLE))
                 .setLargeIcon(art)
                 .setVisibility(Notification.VISIBILITY_PUBLIC) // 잠금화면에도 보이게
                 .setOngoing(true)
