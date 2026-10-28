@@ -101,6 +101,10 @@ export default function Player() {
 
   const toggle = () => { const p = yt.current; if (p) p.getPlayerState() === 1 ? p.pauseVideo() : p.playVideo(); };
 
+  // 안드로이드 앱: 상단 알림·잠금화면 버튼 → window.titan, 지금 곡·재생 상태 → 앱(TitanApp)
+  useEffect(() => { window.titan = { prev: () => go('prev'), next: () => go('next'), toggle }; });
+  useEffect(() => { window.TitanApp?.update(current?.title || '', started && !paused && !kicked, current?.id || ''); }, [current, paused, started, kicked]);
+
   // 브라우저 자동재생 정책 때문에 한 번은 클릭 필요. "여기서 다시 틀기"도 이걸 다시 부른다
   async function start(force = false) {
     pid.current ??= crypto.randomUUID?.() ?? Math.random().toString(36).slice(2) + Date.now().toString(36); // http(IP 접속)에선 randomUUID 없음
