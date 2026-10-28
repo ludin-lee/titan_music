@@ -37,10 +37,10 @@ public class MainActivity extends Activity {
         web.getSettings().setDomStorageEnabled(true); // 층·비밀번호 기억(localStorage)
         web.getSettings().setMediaPlaybackRequiresUserGesture(false);
         web.setWebViewClient(new WebViewClient()); // 링크도 앱 안에서 연다
-        web.addJavascriptInterface(new Object() { // 페이지 → 알림: 지금 곡 제목·재생 여부
-            @JavascriptInterface public void update(String title, boolean playing) {
+        web.addJavascriptInterface(new Object() { // 페이지 → 알림: 지금 곡 제목·재생 여부·유튜브 id(썸네일)
+            @JavascriptInterface public void update(String title, boolean playing, String id) {
                 startService(new Intent(MainActivity.this, PlayService.class).setAction("update")
-                        .putExtra("title", title).putExtra("playing", playing));
+                        .putExtra("title", title).putExtra("playing", playing).putExtra("id", id));
             }
         }, "TitanApp");
 

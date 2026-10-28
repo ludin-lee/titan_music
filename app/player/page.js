@@ -103,7 +103,7 @@ export default function Player() {
 
   // 안드로이드 앱: 상단 알림·잠금화면 버튼 → window.titan, 지금 곡·재생 상태 → 앱(TitanApp)
   useEffect(() => { window.titan = { prev: () => go('prev'), next: () => go('next'), toggle }; });
-  useEffect(() => { window.TitanApp?.update(current?.title || '', started && !paused && !kicked); }, [current, paused, started, kicked]);
+  useEffect(() => { window.TitanApp?.update(current?.title || '', started && !paused && !kicked, current?.id || ''); }, [current, paused, started, kicked]);
 
   // 브라우저 자동재생 정책 때문에 한 번은 클릭 필요. "여기서 다시 틀기"도 이걸 다시 부른다
   async function start(force = false) {
