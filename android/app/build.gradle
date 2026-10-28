@@ -1,0 +1,13 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.titan.music'
+    compileSdk 36
+    defaultConfig {
+        applicationId 'com.titan.music'
+        minSdk 26
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+    }
+}
