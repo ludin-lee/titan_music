@@ -22,7 +22,7 @@ public class PlayService extends Service {
         PendingIntent open = PendingIntent.getActivity(this, 0, new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
         Notification n = new Notification.Builder(this, "play")
                 .setSmallIcon(android.R.drawable.ic_media_play)
-                .setContentTitle("사무실 플레이어 재생 중")
+                .setContentTitle("타이탄 뮤직플레이어 재생 중")
                 .setContentIntent(open)
                 .setOngoing(true)
                 .build();
