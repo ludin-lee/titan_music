@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 플레이어 로고(public/logo.png)를 흰 바탕 가운데에 -->
+<adaptive-icon xmlns:android="http://schemas.android.com/apk/res/android">
+    <background android:drawable="@android:color/white" />
+    <foreground>
+        <inset android:drawable="@drawable/logo" android:inset="26%" />
+    </foreground>
+</adaptive-icon>
