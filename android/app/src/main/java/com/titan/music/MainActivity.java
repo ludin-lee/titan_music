@@ -3,9 +3,12 @@ package com.titan.music;
 import android.app.Activity;
 import android.content.Context;
 import android.content.Intent;
+import android.graphics.Insets;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.View;
+import android.view.WindowInsets;
+import android.widget.FrameLayout;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
@@ -30,7 +33,16 @@ public class MainActivity extends Activity {
         web.getSettings().setDomStorageEnabled(true); // 층·비밀번호 기억(localStorage)
         web.getSettings().setMediaPlaybackRequiresUserGesture(false);
         web.setWebViewClient(new WebViewClient()); // 링크도 앱 안에서 연다
-        setContentView(web);
+
+        // 안드로이드 15부터 앱이 상태바·내비게이션바 밑까지 그려지므로 그만큼 비워 둔다
+        FrameLayout root = new FrameLayout(this);
+        root.addView(web);
+        if (Build.VERSION.SDK_INT >= 30) root.setOnApplyWindowInsetsListener((v, w) -> {
+            Insets i = w.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
+            v.setPadding(i.left, i.top, i.right, i.bottom);
+            return WindowInsets.CONSUMED;
+        });
+        setContentView(root);
         if (b == null) web.loadUrl(URL); else web.restoreState(b);
     }
 
