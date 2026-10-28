@@ -12,6 +12,7 @@ export default function Player() {
   const [notice, setNotice] = useState('');    // 시작 거절·다음 곡 실패 안내
   const [busy, setBusy] = useState(false);     // 다른 곳에서 플레이어가 켜져 있음 → 끊고 가져올지 선택
   const [pw, setPw] = useState('');            // 플레이어 시작 비밀번호 (맞으면 이 PC에 기억)
+  const [inApp, setInApp] = useState(true);    // 안드로이드 앱(WebView) 안이면 앱 받기 버튼 숨김
   const host = useRef(null);
   const yt = useRef(null);
   const cur = useRef(null);
@@ -34,6 +35,8 @@ export default function Player() {
 
   // 시작 전에도 목록은 보이게
   useEffect(() => { getState().then(x => { setS(x); setCur(x.now); }).catch(() => {}); }, []);
+
+  useEffect(() => setInApp(/; wv\)/.test(navigator.userAgent)), []);
 
   useEffect(() => { try { setPw(localStorage.getItem('playerPw:' + room()) || ''); } catch {} }, []);
 
@@ -161,6 +164,7 @@ export default function Player() {
               <form className="startbox" onSubmit={e => { e.preventDefault(); start(); }}>
                 <input type="password" value={pw} onChange={e => setPw(e.target.value)} placeholder="플레이어 비밀번호" aria-label="플레이어 비밀번호" required />
                 <button className="btn red start" disabled={!ready}>▶ 플레이어 시작</button>
+                {!inApp && <a className="btn line" href="/titan-music.apk" download>📱 안드로이드 앱 받기 (화면 꺼도 재생)</a>}
               </form>
             )}
           </div>
