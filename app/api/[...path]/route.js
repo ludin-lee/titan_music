@@ -68,29 +68,43 @@ async function lookup(id) {
 }
 
 // ponytail: API 키 없이 유튜브 검색결과 페이지의 ytInitialData를 파싱. 유튜브가 구조를 바꾸거나 서버 IP를 막으면 깨짐 → 그때 YouTube Data API(키 필요)로 교체
-async function search(q) {
-  const html = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`, {
-    cache: 'no-store',
-    headers: {
-      'Accept-Language': 'ko-KR,ko;q=0.9',
-      'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
-      Cookie: 'SOCS=CAI; CONSENT=YES+', // 해외 서버에서 뜨는 쿠키 동의 화면 건너뛰기
-    },
-  }).then(r => r.text());
+const YT_HEADERS = {
+  'Accept-Language': 'ko-KR,ko;q=0.9',
+  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0 Safari/537.36',
+  Cookie: 'SOCS=CAI; CONSENT=YES+', // 해외 서버에서 뜨는 쿠키 동의 화면 건너뛰기
+};
+async function searchFirst(q) {
+  const html = await fetch(`https://www.youtube.com/results?search_query=${encodeURIComponent(q)}`, { cache: 'no-store', headers: YT_HEADERS }).then(r => r.text());
   const m = html.match(/var ytInitialData = (\{.*?\});<\/script>/s);
   if (!m) throw new Error('유튜브 검색 응답을 읽지 못했어요. 유튜브 링크를 붙여넣어 신청해주세요');
-  const out = [];
+  return JSON.parse(m[1]);
+}
+// 다음 페이지: 앞 페이지 끝에 있던 토큰으로 유튜브 내부 API 호출. 토큰에 검색어가 들어 있다
+async function searchMore(token) {
+  const r = await fetch('https://www.youtube.com/youtubei/v1/search', {
+    method: 'POST',
+    cache: 'no-store',
+    headers: { ...YT_HEADERS, 'Content-Type': 'application/json' },
+    body: JSON.stringify({ context: { client: { clientName: 'WEB', clientVersion: '2.20250101.00.00', hl: 'ko', gl: 'KR' } }, continuation: token }),
+  });
+  if (!r.ok) throw new Error(`유튜브 검색 결과를 더 불러오지 못했어요 (${r.status})`);
+  return r.json();
+}
+async function search(q, token) {
+  const items = [];
+  let next = null;
   (function walk(o) {
-    if (!o || typeof o !== 'object' || out.length >= 10) return;
+    if (!o || typeof o !== 'object') return;
     const v = o.videoRenderer;
     if (v) {
       // 1시간 이상(h:mm:ss) 모음집은 독점 방지로 제외, lengthText 없으면 라이브 → 제외
-      if (v.lengthText && v.lengthText.simpleText.split(':').length < 3) out.push({ id: v.videoId, title: v.title?.runs?.[0]?.text, channel: v.ownerText?.runs?.[0]?.text, length: v.lengthText.simpleText });
+      if (v.lengthText && v.lengthText.simpleText.split(':').length < 3) items.push({ id: v.videoId, title: v.title?.runs?.[0]?.text, channel: v.ownerText?.runs?.[0]?.text, length: v.lengthText.simpleText });
       return;
     }
+    next = o.continuationItemRenderer?.continuationEndpoint?.continuationCommand?.token || next;
     for (const k in o) walk(o[k]);
-  })(JSON.parse(m[1]));
-  return out;
+  })(await (token ? searchMore(token) : searchFirst(q)));
+  return { items, next };
 }
 
 function next(state) {
@@ -134,8 +148,9 @@ const publicState = (s, progress) => ({ playerId: s.playerId, now: s.now, queue:
 
 async function route(req, p, room) {
   if (req.method === 'GET' && p === 'search') {
-    const q = (new URL(req.url).searchParams.get('q') || '').trim().slice(0, 100);
-    return json(q ? await search(q) : []);
+    const sp = new URL(req.url).searchParams;
+    const q = (sp.get('q') || '').trim().slice(0, 100), token = sp.get('next');
+    return json(q || token ? await search(q, token) : { items: [], next: null });
   }
   const [state, progress] = await load(room);
   const pub = () => publicState(state, progress);
