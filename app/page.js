@@ -3,6 +3,8 @@ import { useEffect, useRef, useState } from 'react';
 import { NowCard, RequestList, Row, Top5, Topbar, getState, post, searchYT, usePoll } from './ui';
 
 const fmt = sec => { sec = Math.max(0, Math.floor(sec)); return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`; };
+// 유튜브는 페이지가 넘어가도 같은 영상을 또 줄 때가 있다
+const uniq = list => [...new Map(list.map(r => [r.id, r])).values()];
 
 // 관리자: 지금 곡 진행률 + 끌어서 시간 이동.
 // 플레이어는 15초마다·재생/일시정지 때만 위치를 보내므로 그 사이 시간은 여기서 이어 계산한다
@@ -41,6 +43,9 @@ export default function Home() {
   const [q, setQ] = useState('');
   const [msg, setMsg] = useState({ text: '', err: false });
   const [results, setResults] = useState([]);
+  const [next, setNext] = useState(null); // 결과 다음 페이지 토큰
+  const listRef = useRef();
+  const searchId = useRef(0); // 새 검색·신청 뒤에 늦게 도착한 이전 응답을 버리려고
 
   const [pw, setPw] = useState('');
   const [admin, setAdmin] = useState(false);
@@ -57,20 +62,45 @@ export default function Home() {
     localStorage.setItem('by', by);
     const v = q.trim();
     if (/youtu\.?be|^[\w-]{11}$/.test(v)) return reserve(v);
+    const id = ++searchId.current;
+    setNext(null);
+    listRef.current.scrollTop = 0;
     setMsg({ text: '검색 중…' });
     try {
-      const list = await searchYT(v);
-      setResults(list);
-      setMsg(list.length ? { text: '' } : { text: '검색 결과가 없어요', err: true });
-    } catch (err) { setResults([]); setMsg({ text: err.message, err: true }); }
+      const { items, next } = await searchYT({ q: v });
+      if (id !== searchId.current) return;
+      setResults(uniq(items));
+      setNext(next);
+      setMsg(items.length ? { text: '' } : { text: '검색 결과가 없어요', err: true });
+    } catch (err) { if (id === searchId.current) { setResults([]); setMsg({ text: err.message, err: true }); } }
   }
+
+  // 목록 끝이 가까워지면 다음 페이지. 다음 토큰이 오면 새로 관찰하므로, 걸러져서 결과가 적어 끝이 그대로 보여도 이어서 불러온다
+  // 기준은 화면이 아니라 목록: 목록 아래쪽이 화면 밖에 잘려 있어도 동작하게
+  useEffect(() => {
+    if (!next) return;
+    const io = new IntersectionObserver(async ([e]) => {
+      if (!e.isIntersecting) return;
+      io.disconnect();
+      const id = searchId.current;
+      try {
+        const more = await searchYT({ next });
+        if (id !== searchId.current) return;
+        setResults(r => uniq([...r, ...more.items]));
+        setNext(more.next);
+      } catch (err) { if (id === searchId.current) { setNext(null); setMsg({ text: err.message, err: true }); } }
+    }, { root: listRef.current, rootMargin: '300px' });
+    io.observe(listRef.current.lastElementChild);
+    return () => io.disconnect();
+  }, [next]);
 
   async function reserve(url) {
     if (!by.trim()) { byRef.current?.focus(); return setMsg({ text: '신청자 이름을 먼저 입력해주세요', err: true }); }
     localStorage.setItem('by', by);
     try {
       setS(await post('/api/queue', { url, by }));
-      setQ(''); setResults([]); setMsg({ text: '✅ 신청됐어요' });
+      searchId.current++;
+      setQ(''); setResults([]); setNext(null); setMsg({ text: '✅ 신청됐어요' });
     } catch (err) { setMsg({ text: err.message, err: true }); }
   }
 
@@ -112,12 +142,13 @@ export default function Home() {
               </div>
             </form>
             <div className={`msg ${msg.err ? 'err' : ''}`} role="status">{msg.text}</div>
-            <ul className="list">
+            <ul ref={listRef} className="list results">
               {results.map(r => (
                 <Row key={r.id} v={r} sub={`${r.channel} · ${r.length}`}>
                   <button className="btn sm red" onClick={() => reserve(r.id)}>신청</button>
                 </Row>
               ))}
+              {next && <li className="msg">더 불러오는 중…</li>}
             </ul>
           </section>
 

@@ -79,6 +79,7 @@ input:focus, textarea:focus { outline: 2px solid var(--red); outline-offset: -1p
 .search input:focus { background: #fff; }
 .msg { font-size: 13.5px; font-weight: 600; min-height: 20px; margin-top: 8px; color: var(--ink2); }
 .msg.err { color: var(--red); }
+.results { max-height: 60vh; overflow-y: auto; } /* 아래 관리자·신청 목록까지 닿도록 페이지 대신 목록 안에서 스크롤 */
 
 /* 접는 관리자 칸 */
 details.card > summary { cursor: pointer; font-size: 15px; font-weight: 700; list-style: none; }
