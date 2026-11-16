@@ -69,7 +69,7 @@ export default function Player() {
     yt.current?.pauseVideo?.();
   }
 
-  // 실패하면 2초 간격으로 3번까지 다시 시도. 그래도 안 되면 안내를 띄우고, 3초 점검이 계속 다시 시도한다
+  // 실패하면 2초 간격으로 3번까지 다시 시도. 그래도 안 되면 안내를 띄우고, 주기 점검이 계속 다시 시도한다
   async function go(dir) {
     if (kickedRef.current || going.current) return;
     going.current = true;
@@ -129,7 +129,13 @@ export default function Player() {
 
   useEffect(() => {
     if (!started) return;
-    const t = setInterval(async () => {
+    // Vercel 호출 수를 줄이려고 재생 중엔 10초, 멈춰 있거나 곡이 없으면 30초마다 확인
+    let t, stop = false;
+    const loop = async () => {
+      await check();
+      if (!stop) t = setTimeout(loop, yt.current?.getPlayerState?.() === 1 ? 10000 : 30000);
+    };
+    const check = async () => {
       const x = await getState().catch(() => null);
       if (!x) return;
       setS(x);
@@ -141,10 +147,11 @@ export default function Player() {
         ({ prev: () => go('prev'), next: () => go('next'), toggle, seek: () => seek(x.cmd.t), play: () => { setCur(x.now); if (x.now) play(x.now.id); } })[x.cmd.type]?.();
       } else if (!cur.current && x.queue.length) go('next'); // 멈춰 있다가 곡이 생김
       else if (cur.current && yt.current?.getPlayerState?.() === 0) go('next'); // 곡이 끝났는데 다음 곡으로 못 넘어간 경우
-    }, 3000);
-    // ponytail: 위치는 15초마다만 보내고 그 사이는 관리자 화면이 시간을 이어 계산 (DB 요청 절약)
-    const r = setInterval(report, 15000);
-    return () => { clearInterval(t); clearInterval(r); };
+    };
+    loop();
+    // ponytail: 위치는 30초마다만 보내고 그 사이는 관리자 화면이 시간을 이어 계산 (호출 절약). 서버 GRACE(2분)보다 짧아야 함
+    const r = setInterval(report, 30000);
+    return () => { stop = true; clearTimeout(t); clearInterval(r); };
   }, [started]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const view = s && { ...s, now: current };
