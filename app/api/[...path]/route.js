@@ -7,6 +7,8 @@ export const dynamic = 'force-dynamic';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 // 플레이어 시작용, 층마다 따로 (PLAYER_PASSWORD_3, PLAYER_PASSWORD_4). 없으면 공용 PLAYER_PASSWORD → 관리자 비밀번호
 const playerPassword = room => process.env[`PLAYER_PASSWORD_${room}`] || process.env.PLAYER_PASSWORD || ADMIN_PASSWORD;
+// 여는 층. Render 환경변수 NEXT_PUBLIC_FLOORS (예: 3,4,5)를 바꾸면 다시 빌드되며 열린다. 화면(ui.js)도 같은 값을 쓴다
+const FLOORS = (process.env.NEXT_PUBLIC_FLOORS || '3,4').split(',');
 // Supabase 프로젝트 설정 > API에서 복사해 환경변수로 넣는다. 서버에서만 쓰는 service role 키라 RLS를 우회한다
 const DB_URL = process.env.SUPABASE_URL;
 const DB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
@@ -163,7 +165,7 @@ async function route(req, p, room) {
   // 비밀번호를 아는 사람이 force로 "기존 플레이어 끊고 여기서 틀기"를 고르면 넘겨준다 (중복 로그인 처리처럼)
   // 플레이어에서 다른 층으로 옮기기 전에 그 층 비밀번호 확인 (플레이어를 가져오진 않음)
   if (p === 'player/check') {
-    if (!/^[\w-]{1,20}$/.test(b.floor || '')) return json({ error: '층이 잘못됐어요' }, 400);
+    if (!FLOORS.includes(b.floor)) return json({ error: '아직 열리지 않은 층이에요' }, 400);
     if (b.password !== playerPassword(b.floor)) return json({ error: `${b.floor}층 비밀번호가 틀렸어요` }, 403);
     return json({ ok: true });
   }
@@ -200,6 +202,8 @@ async function route(req, p, room) {
     if (!v) return json({ error: '영상을 찾을 수 없어요 (비공개/삭제됨?)' }, 400);
     if (state.queue.some(q => q.id === id && !q.played)) return json({ error: '이미 예약된 곡이에요' }, 400);
     state.queue.push({ ...v, by });
+    // DB 전송량(Supabase 무료 월 5GB)을 줄이려고 50곡 넘으면 오래된 재생 끝난 곡부터 버린다. 아직 안 나온 곡은 안 버림
+    while (state.queue.length > 50 && state.queue[0].played) { state.queue.shift(); state.replayPos = Math.max(0, state.replayPos - 1); }
     return done(pub());
   }
   // 좋아요(1)/싫어요(-1)/취소(0). 누가 눌렀는지는 각자 브라우저(localStorage)가 기억하고 이전 값(from)을 같이 보낸다
@@ -258,7 +262,7 @@ async function route(req, p, room) {
 async function handle(req, { params }) {
   try {
     const room = req.headers.get('x-room') || '';
-    if (!/^[\w-]{0,20}$/.test(room)) return json({ error: '방 이름이 잘못됐어요' }, 400);
+    if (!FLOORS.includes(room)) return json({ error: '아직 열리지 않은 층이에요' }, 400);
     return await route(req, (await params).path.join('/'), room);
   } catch (err) {
     console.error(err);

@@ -5,7 +5,8 @@ import { useEffect, useState } from 'react';
 export const thumb = id => `https://i.ytimg.com/vi/${id}/mqdefault.jpg`;
 
 // 층마다 따로: 신청곡·플레이어가 층별로 돈다. 주소 ?room=3 > 마지막으로 고른 층 > 첫 층
-export const FLOORS = ['3', '4'];
+// 여는 층은 환경변수 NEXT_PUBLIC_FLOORS (빌드할 때 박힘). 서버(route.js)도 같은 값으로 막는다
+export const FLOORS = (process.env.NEXT_PUBLIC_FLOORS || '3,4').split(',');
 const saved = () => { try { return localStorage.getItem('room'); } catch { return null; } };
 export const room = () => [new URLSearchParams(location.search).get('room'), saved()].find(f => FLOORS.includes(f)) || FLOORS[0];
 
