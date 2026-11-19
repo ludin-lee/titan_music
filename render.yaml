@@ -11,6 +11,8 @@ services:
     envVars:
       - key: NEXT_PUBLIC_FLOORS # 여는 층. 바꾸고 저장하면 다시 빌드되며 열림
         value: "3,4"
+      - key: QUEUE_LIMIT # 층마다 보관할 신청곡 수
+        value: "50"
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
