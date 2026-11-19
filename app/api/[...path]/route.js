@@ -146,6 +146,9 @@ function ownerAlive(state, progress, now = Date.now()) {
 // 하루의 시작을 한국 시간 8시로: UTC+9에서 8시간을 뺀 날짜
 const resetDay = (now = Date.now()) => new Date(now + (9 - 8) * 3600e3).toISOString().slice(0, 10);
 
+// 주말(한국 시간 토·일)엔 쉰다
+const weekend = (now = Date.now()) => [0, 6].includes(new Date(now + 9 * 3600e3).getUTCDay());
+
 const json = (obj, status = 200) => Response.json(obj, { status, headers: { 'Cache-Control': 'no-store' } });
 // serverNow: 화면이 서버 시계 기준으로 진행률을 계산하도록
 // votes: 곡 id별 좋아요/싫어요 수. 신청곡을 지워도 남는다. top: 좋아요 많은 순 5곡 (같으면 싫어요 적은 순)
@@ -276,6 +279,7 @@ async function handle(req, { params }) {
   try {
     const room = req.headers.get('x-room') || '';
     if (!FLOORS.includes(room)) return json({ error: '아직 열리지 않은 층이에요' }, 400);
+    if (weekend()) return json({ error: '주말에는 노래 예약을 쉬어요. 월요일에 만나요' }, 403);
     return await route(req, (await params).path.join('/'), room);
   } catch (err) {
     console.error(err);
