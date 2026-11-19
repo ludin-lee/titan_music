@@ -16,7 +16,7 @@ import android.webkit.WebView;
 import android.webkit.WebViewClient;
 
 public class MainActivity extends Activity {
-    static final String URL = "https://titanmusic-three.vercel.app/player";
+    static final String URL = "https://titan-music-hyj8.onrender.com/player";
 
     // 화면이 꺼져도 페이지가 "보이는 중"이라고 믿게 해서 유튜브가 멈추지 않게 한다
     static class AlwaysVisibleWebView extends WebView {
