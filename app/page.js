@@ -63,6 +63,7 @@ export default function Home() {
     const v = q.trim();
     if (/youtu\.?be|^[\w-]{11}$/.test(v)) return reserve(v);
     const id = ++searchId.current;
+    setResults([]);
     setNext(null);
     listRef.current.scrollTop = 0;
     setMsg({ text: '검색 중…' });
@@ -71,7 +72,8 @@ export default function Home() {
       if (id !== searchId.current) return;
       setResults(uniq(items));
       setNext(next);
-      setMsg(items.length ? { text: '' } : { text: '검색 결과가 없어요', err: true });
+      // 첫 페이지가 다 걸러져도(1시간 넘는 모음집·라이브) 다음 페이지에 결과가 있을 수 있어 "검색 중"을 유지한다
+      setMsg(items.length ? { text: '' } : next ? { text: '검색 중…' } : { text: '검색 결과가 없어요', err: true });
     } catch (err) { if (id === searchId.current) { setResults([]); setMsg({ text: err.message, err: true }); } }
   }
 
@@ -88,6 +90,8 @@ export default function Home() {
         if (id !== searchId.current) return;
         setResults(r => uniq([...r, ...more.items]));
         setNext(more.next);
+        // 아직 "검색 중"이면 지금까지 결과가 0개: 이번에 나오면 지우고, 끝까지 없으면 없다고 알린다
+        setMsg(m => m.text !== '검색 중…' ? m : more.items.length ? { text: '' } : more.next ? m : { text: '검색 결과가 없어요', err: true });
       } catch (err) { if (id === searchId.current) { setNext(null); setMsg({ text: err.message, err: true }); } }
     }, { root: listRef.current, rootMargin: '300px' });
     io.observe(listRef.current.lastElementChild);
