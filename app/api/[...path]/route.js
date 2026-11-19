@@ -7,7 +7,7 @@ export const dynamic = 'force-dynamic';
 const ADMIN_PASSWORD = process.env.ADMIN_PASSWORD || 'admin';
 // 플레이어 시작용, 층마다 따로 (PLAYER_PASSWORD_3, PLAYER_PASSWORD_4). 없으면 공용 PLAYER_PASSWORD → 관리자 비밀번호
 const playerPassword = room => process.env[`PLAYER_PASSWORD_${room}`] || process.env.PLAYER_PASSWORD || ADMIN_PASSWORD;
-// Vercel 마켓플레이스에서 Supabase를 연결하면 들어오는 이름. 서버에서만 쓰는 service role 키라 RLS를 우회한다
+// Supabase 프로젝트 설정 > API에서 복사해 환경변수로 넣는다. 서버에서만 쓰는 service role 키라 RLS를 우회한다
 const DB_URL = process.env.SUPABASE_URL;
 const DB_KEY = process.env.SUPABASE_SERVICE_ROLE_KEY;
 /* Supabase SQL Editor에서 한 번 실행:
@@ -41,7 +41,7 @@ async function load(room) {
     const [row] = await db('GET', `?room=eq.${room || 'main'}&select=state,progress`);
     return [{ ...EMPTY, ...row?.state }, row?.progress ?? null];
   }
-  if (process.env.VERCEL) throw new Error('저장소가 연결되지 않았어요. Vercel 프로젝트 Storage에서 Supabase를 연결해주세요');
+  if (process.env.VERCEL || process.env.RENDER) throw new Error('저장소가 연결되지 않았어요. SUPABASE_URL·SUPABASE_SERVICE_ROLE_KEY 환경변수를 넣어주세요');
   try { return [{ ...EMPTY, ...JSON.parse(fs.readFileSync(dataFile(room), 'utf8')) }, localProgress[room] ?? null]; } catch { return [{ ...EMPTY }, localProgress[room] ?? null]; }
 }
 async function saveProgress(progress, room) {

@@ -1,0 +1,21 @@
+# Render 무료 플랜: 요청 수 제한 없음. 15분 동안 요청이 없으면 잠들고 첫 요청에 1분쯤 걸려 깨어남
+services:
+  - type: web
+    name: titan-music
+    runtime: node
+    plan: free
+    region: singapore
+    buildCommand: npm ci && npm run build
+    startCommand: npm start
+    healthCheckPath: /player
+    envVars:
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: ADMIN_PASSWORD
+        sync: false
+      - key: PLAYER_PASSWORD_3
+        sync: false
+      - key: PLAYER_PASSWORD_4
+        sync: false
