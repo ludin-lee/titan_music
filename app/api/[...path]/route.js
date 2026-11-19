@@ -143,6 +143,9 @@ function ownerAlive(state, progress, now = Date.now()) {
   return !!progress?.playing && now < progress.at + (progress.d - progress.t) * 1000 + GRACE;
 }
 
+// 하루의 시작을 한국 시간 8시로: UTC+9에서 8시간을 뺀 날짜
+const resetDay = (now = Date.now()) => new Date(now + (9 - 8) * 3600e3).toISOString().slice(0, 10);
+
 const json = (obj, status = 200) => Response.json(obj, { status, headers: { 'Cache-Control': 'no-store' } });
 // serverNow: 화면이 서버 시계 기준으로 진행률을 계산하도록
 // votes: 곡 id별 좋아요/싫어요 수. 신청곡을 지워도 남는다. top: 좋아요 많은 순 5곡 (같으면 싫어요 적은 순)
@@ -157,6 +160,14 @@ async function route(req, p, room) {
     return json(q || token ? await search(q, token) : { items: [], next: null });
   }
   const [state, progress] = await load(room);
+  // 매일 아침 8시(한국)에 신청곡 초기화. 크론 없이 8시 이후 첫 요청이 비운다. 좋아요 기록(Top5)은 남김
+  // 지금 나오던 곡은 플레이어에서 끝까지 나오고, 그 뒤로는 새 신청곡을 기다린다
+  const day = resetDay();
+  if (state.day !== day) {
+    if (state.day) Object.assign(state, { now: null, queue: [], history: [], replayPos: 0 });
+    state.day = day;
+    await save(state, room);
+  }
   const pub = () => publicState(state, progress);
   if (req.method === 'GET' && p === 'state') return json(pub());
   if (req.method !== 'POST') return json({ error: 'not found' }, 404);
