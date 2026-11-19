@@ -7,7 +7,7 @@ const fmt = sec => { sec = Math.max(0, Math.floor(sec)); return `${Math.floor(se
 const uniq = list => [...new Map(list.map(r => [r.id, r])).values()];
 
 // 관리자: 지금 곡 진행률 + 끌어서 시간 이동.
-// 플레이어는 15초마다·재생/일시정지 때만 위치를 보내므로 그 사이 시간은 여기서 이어 계산한다
+// 플레이어는 30초마다·재생/일시정지 때만 위치를 보내므로 그 사이 시간은 여기서 이어 계산한다
 function Progress({ s, offset, onSeek }) {
   const [, tick] = useState(0);
   const [drag, setDrag] = useState(null);  // 끄는 중인 값
@@ -15,7 +15,7 @@ function Progress({ s, offset, onSeek }) {
   useEffect(() => { const i = setInterval(() => tick(x => x + 1), 1000); return () => clearInterval(i); }, []);
 
   const p = s?.progress;
-  if (!p || p.id !== s.now?.id || !p.d) return <div className="prog wait">재생 위치를 기다리는 중… (최대 15초)</div>;
+  if (!p || p.id !== s.now?.id || !p.d) return <div className="prog wait">재생 위치를 기다리는 중… (최대 30초)</div>;
   const nowMs = Date.now() + offset;
   const since = at => (p.playing ? (nowMs - at) / 1000 : 0);
   const useHold = hold && p.at < hold.at && nowMs - hold.at < 10000;
@@ -54,7 +54,7 @@ export default function Home() {
   const offset = useRef(0); // 서버 시계 - 내 시계
 
   const refresh = () => getState().then(x => { setS(x); setLoadErr(''); offset.current = x.serverNow - Date.now(); }).catch(e => setLoadErr(e.message));
-  usePoll(refresh, 5000);
+  usePoll(refresh, 15000);
   useEffect(() => setBy(localStorage.getItem('by') || ''), []);
 
   async function onSearch(e) {

@@ -225,7 +225,7 @@ async function route(req, p, room) {
   if (b.password !== ADMIN_PASSWORD) return json({ error: '비밀번호가 틀렸어요' }, 403);
 
   if (p === 'admin/check') return json({ ok: true });
-  // 원격 조작: 플레이어가 3초마다 cmd.seq·volume 변화를 보고 실행
+  // 원격 조작: 플레이어가 10~30초마다 cmd.seq·volume 변화를 보고 실행
   if (p === 'admin/cmd' && ['prev', 'toggle', 'next', 'seek'].includes(b.type)) {
     const t = Number(b.t);
     if (b.type === 'seek' && !(t >= 0)) return json({ error: '이동할 시간이 잘못됐어요' }, 400);
